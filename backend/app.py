@@ -1,10 +1,9 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-import os
-import pandas as pd
 from dotenv import load_dotenv
 
-# Import custom detection modules
+# Import custom modules
+from generate_data import generate_synthetic_data
 from data_processing import preprocess_data
 from anomaly_detection import run_detection_pipeline
 from ai_agent import analyze_anomaly
@@ -13,9 +12,8 @@ from ai_agent import analyze_anomaly
 load_dotenv()
 
 app = Flask(__name__)
-CORS(app) # Enable CORS for frontend requests
+CORS(app) 
 
-# Simple in-memory storage for Hackathon MVP
 results_db = []
 
 @app.route('/health', methods=['GET'])
@@ -25,18 +23,18 @@ def health_check():
 @app.route('/analyze', methods=['POST'])
 def analyze_data():
     """
-    Receives CSV, processes it, runs anomaly detection, and attaches AI reasoning.
+    Receives a username, mocks realistic data, runs anomaly detection, and attaches AI reasoning.
     """
-    if 'file' not in request.files:
-        return jsonify({"error": "No file uploaded"}), 400
+    data = request.get_json()
+    if not data or 'username' not in data:
+        return jsonify({"error": "Username not provided"}), 400
         
-    file = request.files['file']
-    if not file.filename.endswith('.csv'):
-         return jsonify({"error": "File must be a CSV"}), 400
+    username = data['username']
          
     try:
-        # 1. Read CSV
-        df = pd.read_csv(file)
+        # 1. Fetch/Mock Data based on username
+        # This will simulate an API network call. 
+        df = generate_synthetic_data(username=username, days=90)
         
         # 2. Data Preprocessing
         df_clean = preprocess_data(df)
@@ -45,16 +43,20 @@ def analyze_data():
         anomalies = run_detection_pipeline(df_clean)
         
         # 4. AI Reasoning
+        # For a fast 48hr hackathon MVP, limit to top 3 most extreme anomalies to save API time
+        anomalies = sorted(anomalies, key=lambda x: abs(x.get('z_score', 0)), reverse=True)[:3]
+        
         processed_anomalies = []
         for anomaly in anomalies:
-            # Note: For production with many anomalies, consider async/batching here
             ai_insight = analyze_anomaly(anomaly)
             anomaly.update({"insight": ai_insight})
             processed_anomalies.append(anomaly)
             
-        # Store result in local DB
+        # Re-sort chronologically for UI plotting
+        processed_anomalies = sorted(processed_anomalies, key=lambda x: x['timestamp'])
+            
         analysis_result = {
-            "filename": file.filename,
+            "username": username,
             "total_rows": len(df),
             "anomalies": processed_anomalies
         }
@@ -70,17 +72,10 @@ def analyze_data():
 
 @app.route('/get-results', methods=['GET'])
 def get_results():
-    """
-    Returns the most recent analysis run.
-    """
     return jsonify({
         "status": "success", 
         "data": results_db[-1] if results_db else None
     })
 
 if __name__ == '__main__':
-    from generate_data import generate_synthetic_data
-    if not os.path.exists("social_media_data.csv"):
-        print("Generating synthetic dataset...")
-        generate_synthetic_data()
     app.run(debug=True, port=5000)

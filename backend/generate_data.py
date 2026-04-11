@@ -1,42 +1,52 @@
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
-import os
+import hashlib
 
-def generate_synthetic_data(filename="social_media_data.csv", days=90):
-    start_date = datetime.now() - timedelta(days=days)
+def generate_synthetic_data(username="mock_user", days=90):
+    """
+    Generates a realistic social media dataset deterministically based on the username hash.
+    Entering the same username will always yield the same data and anomaly pattern.
+    """
+    # Use username as seed for deterministic pseudo-random generation
+    seed = int(hashlib.md5(username.encode()).hexdigest(), 16) % (2**32)
+    np.random.seed(seed)
     
+    start_date = datetime.now() - timedelta(days=days)
     data = []
     
-    # Base baseline metrics
-    base_likes = 500
-    base_comments = 50
-    base_shares = 20
+    # Base metrics relative to username hash
+    base_likes = 500 + (seed % 1000) * 10
+    base_comments = 50 + (seed % 100) * 2
+    base_shares = 20 + (seed % 50) * 2
+    
+    # Pre-select deterministic anomaly days
+    anomaly_viral = (seed % 80) + 1
+    anomaly_bot = ((seed * 2) % 80) + 1
+    anomaly_crisis = ((seed * 3) % 80) + 1
     
     for i in range(days):
         current_date = start_date + timedelta(days=i)
         
-        # Add random noise
+        # Base gaussian noise
         likes = int(np.random.normal(base_likes, base_likes * 0.1))
         comments = int(np.random.normal(base_comments, base_comments * 0.1))
         shares = int(np.random.normal(base_shares, base_shares * 0.1))
         
-        # Inject anomalies
-        # 1. Viral Spike (all metrics go way up, maybe Day 30)
-        if i == 30:
+        # Inject anomalies deterministically based on the user's specific "timeline destiny"
+        if i == anomaly_viral:
             likes *= 5
             comments *= 4
             shares *= 8
             
-        # 2. Bot Activity Spike (only likes go up massively, Day 60)
-        elif i == 60:
+        elif i == anomaly_bot:
+            # Massive likes spike, no shares - classic botting 
             likes *= 10
-            # comments and shares stay relatively normal
             
-        # 3. Crisis Drop (metrics plummet, but comments spike - Day 80)
-        elif i == 80:
+        elif i == anomaly_crisis:
+            # Likes drop but comments surge (controversy)
             likes = int(likes * 0.2)
-            comments *= 3 # people complaining!
+            comments *= 3 
             shares = int(shares * 0.5)
             
         data.append({
@@ -47,10 +57,8 @@ def generate_synthetic_data(filename="social_media_data.csv", days=90):
         })
         
     df = pd.DataFrame(data)
-    
-    # Save the synthetic data
-    df.to_csv(filename, index=False)
-    print(f"Synthetic data successfully generated with {days} days of data at {filename}")
+    return df
 
 if __name__ == "__main__":
-    generate_synthetic_data()
+    test_df = generate_synthetic_data("elonmusk")
+    print(test_df.head())
