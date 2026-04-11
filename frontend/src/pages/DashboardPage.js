@@ -1,148 +1,394 @@
-import React, { useEffect, useState, useMemo } from "react";
-import { useNavigate } from "react-router-dom";
-import Plot from "react-plotly.js";
-import "./DashboardPage.css";
+import React, { useState, useMemo } from "react";
+import {
+  ComposedChart,
+  Line,
+  Area,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  ReferenceDot,
+} from "recharts";
 
-export default function DashboardPage() {
-  const [result, setResult]   = useState(null);
-  const [metric, setMetric]   = useState("likes");
-  const navigate              = useNavigate();
+/* ─── Mock time-series data ──────────────────────────────────── */
 
-  useEffect(() => {
-    const stored = sessionStorage.getItem("analysisResult");
-    if (!stored) { navigate("/"); return; }
-    setResult(JSON.parse(stored));
-  }, [navigate]);
+function generateData() {
+  const base = 3200;
+  const points = [];
+  const startDate = new Date("2026-01-01");
+  for (let i = 0; i < 90; i++) {
+    const d = new Date(startDate);
+    d.setDate(d.getDate() + i);
+    const dateStr = d.toISOString().slice(0, 10);
 
-  const { plotData, plotLayout } = useMemo(() => {
-    if (!result) return { plotData: [], plotLayout: {} };
+    const noise = Math.sin(i * 0.3) * 400 + (Math.random() - 0.5) * 300;
+    let value = Math.round(base + noise + i * 8);
+    let isAnomaly = false;
+    let severity = null;
 
-    const data = result.data || [];
-    const anomalies = (result.anomalies || []).filter((a) => a.metric === metric);
-    const dates  = data.map((d) => d.date);
-    const values = data.map((d) => d[metric]);
+    // Inject anomalies at specific points
+    if (i === 14) { value = 7200; isAnomaly = true; severity = "critical"; }
+    if (i === 32) { value = 1100; isAnomaly = true; severity = "critical"; }
+    if (i === 51) { value = 6800; isAnomaly = true; severity = "medium"; }
+    if (i === 67) { value = 7800; isAnomaly = true; severity = "critical"; }
+    if (i === 78) { value = 5900; isAnomaly = true; severity = "medium"; }
 
-    // Anomaly markers
-    const anomalyDates  = anomalies.map((a) => a.date);
-    const anomalyValues = anomalies.map((a) => a.value);
-    const anomalyLabels = anomalies.map(
-      (a) =>
-        `${a.type.toUpperCase()} (${a.severity})<br>Z: ${a.z_score?.toFixed(2)}<br>${a.pct_change > 0 ? "+" : ""}${a.pct_change}%`
-    );
-    const markerColors = anomalies.map((a) =>
-      a.severity === "critical" ? "#ef4444" : a.severity === "medium" ? "#f59e0b" : "#22c55e"
-    );
+    // Confidence band
+    const upper = value + 600 + Math.random() * 200;
+    const lower = Math.max(value - 600 - Math.random() * 200, 400);
 
-    const plotData = [
-      {
-        type: "scatter",
-        mode: "lines",
-        name: metric,
-        x: dates,
-        y: values,
-        line: { color: "#6366f1", width: 2 },
-        fill: "tozeroy",
-        fillcolor: "rgba(99,102,241,0.08)",
-      },
-      {
-        type: "scatter",
-        mode: "markers",
-        name: "Anomalies",
-        x: anomalyDates,
-        y: anomalyValues,
-        text: anomalyLabels,
-        hovertemplate: "%{text}<extra></extra>",
-        marker: { color: markerColors, size: 10, symbol: "circle", line: { color: "#fff", width: 1.5 } },
-      },
-    ];
+    points.push({
+      date: dateStr,
+      label: `${d.toLocaleString("default", { month: "short" })} ${d.getDate()}`,
+      value,
+      upper,
+      lower,
+      band: [lower, upper],
+      isAnomaly,
+      severity,
+      // Additional metrics
+      engagement: Math.round(value * 0.7 + Math.random() * 200),
+      mentions: Math.round(value * 0.3 + Math.random() * 100),
+      sentiment: +(50 + Math.sin(i * 0.15) * 20 + (Math.random() - 0.5) * 10).toFixed(1),
+    });
+  }
+  return points;
+}
 
-    const plotLayout = {
-      paper_bgcolor: "transparent",
-      plot_bgcolor: "transparent",
-      font: { color: "#e2e8f0", family: "Inter, sans-serif", size: 12 },
-      xaxis: { gridcolor: "#2a2d3a", showgrid: true, zeroline: false },
-      yaxis: { gridcolor: "#2a2d3a", showgrid: true, zeroline: false },
-      legend: { orientation: "h", y: -0.15 },
-      margin: { t: 20, l: 60, r: 20, b: 60 },
-      hovermode: "x unified",
-    };
+const RAW_DATA = generateData();
 
-    return { plotData, plotLayout };
-  }, [result, metric]);
+const METRICS = [
+  { key: "value", label: "Activity" },
+  { key: "engagement", label: "Engagement" },
+  { key: "mentions", label: "Mentions" },
+  { key: "sentiment", label: "Sentiment" },
+];
 
-  if (!result) return null;
+const DATE_RANGES = [
+  { key: "7d", label: "7D" },
+  { key: "30d", label: "30D" },
+  { key: "60d", label: "60D" },
+  { key: "all", label: "All" },
+];
 
-  const { summary } = result;
-  const METRICS = ["likes", "comments", "shares", "posts"];
+/* ─── Helpers ────────────────────────────────────────────────── */
 
+function filterByRange(data, range) {
+  if (range === "all") return data;
+  const days = parseInt(range);
+  return data.slice(-days);
+}
+
+function getStats(data) {
+  const anomalies = data.filter((d) => d.isAnomaly);
+  const critical = anomalies.filter((d) => d.severity === "critical").length;
+  const values = data.map((d) => d.value);
+  const avg = Math.round(values.reduce((a, b) => a + b, 0) / values.length);
+  return {
+    total: anomalies.length,
+    critical,
+    avgEngagement: avg,
+  };
+}
+
+/* ─── Custom Tooltip ─────────────────────────────────────────── */
+
+function ChartTooltip({ active, payload, label }) {
+  if (!active || !payload?.length) return null;
+  const d = payload[0]?.payload;
+  if (!d) return null;
   return (
-    <div className="page">
-      <h1 className="page-title">
-        📊 Dashboard
-        <span className="page-sub"> · {result.data?.length} days of data</span>
-      </h1>
-
-      {/* Summary stats */}
-      <div className="grid-4" style={{ marginBottom: "1.5rem" }}>
-        <StatCard icon="📆" label="Days Analyzed"   value={summary?.total_days} />
-        <StatCard icon="⚡" label="Anomalies Found"  value={summary?.total_anomalies} color="#6366f1" />
-        <StatCard icon="🔴" label="Critical"          value={summary?.severity_breakdown?.critical} color="#ef4444" />
-        <StatCard icon="🟡" label="Medium"            value={summary?.severity_breakdown?.medium}   color="#f59e0b" />
-      </div>
-
-      {/* Averages */}
-      <div className="grid-4" style={{ marginBottom: "1.5rem" }}>
-        <StatCard icon="❤️" label="Avg Likes"    value={summary?.averages?.likes?.toLocaleString()} />
-        <StatCard icon="💬" label="Avg Comments" value={summary?.averages?.comments?.toLocaleString()} />
-        <StatCard icon="🔁" label="Avg Shares"   value={summary?.averages?.shares?.toLocaleString()} />
-        <StatCard
-          icon="📬"
-          label="Spikes / Drops"
-          value={`${summary?.type_breakdown?.spikes} / ${summary?.type_breakdown?.drops}`}
-        />
-      </div>
-
-      {/* Chart */}
-      <div className="card chart-card">
-        <div className="chart-header">
-          <h2 className="chart-title">Engagement Over Time</h2>
-          <div className="metric-tabs">
-            {METRICS.map((m) => (
-              <button
-                key={m}
-                className={`tab-btn ${metric === m ? "active" : ""}`}
-                onClick={() => setMetric(m)}
-              >
-                {m}
-              </button>
-            ))}
-          </div>
-        </div>
-        <Plot
-          data={plotData}
-          layout={plotLayout}
-          config={{ responsive: true, displayModeBar: false }}
-          style={{ width: "100%", height: 380 }}
-        />
-        <p className="chart-legend">
-          Coloured dots = anomalies:&nbsp;
-          <span style={{ color: "#ef4444" }}>● critical</span>&nbsp;
-          <span style={{ color: "#f59e0b" }}>● medium</span>&nbsp;
-          <span style={{ color: "#22c55e" }}>● low</span>
-        </p>
+    <div className="bg-white rounded-lg shadow-lg border border-gray-100 px-4 py-3 text-xs">
+      <p className="font-medium text-gray-900 mb-1">{d.label || label}</p>
+      <div className="space-y-0.5 text-gray-500">
+        <p>Value: <span className="text-gray-900 font-medium">{d.value?.toLocaleString()}</span></p>
+        {d.isAnomaly && (
+          <p className="text-red-600 font-semibold mt-1">
+            ⚠ {d.severity === "critical" ? "Critical" : "Medium"} anomaly
+          </p>
+        )}
       </div>
     </div>
   );
 }
 
-function StatCard({ icon, label, value, color }) {
+/* ─── Dashboard Page ─────────────────────────────────────────── */
+
+export default function DashboardPage() {
+  const [metric, setMetric] = useState("value");
+  const [range, setRange] = useState("all");
+  const [sensitivity, setSensitivity] = useState(50);
+
+  const data = useMemo(() => filterByRange(RAW_DATA, range), [range]);
+  const stats = useMemo(() => getStats(data), [data]);
+  const anomalies = useMemo(() => data.filter((d) => d.isAnomaly), [data]);
+
   return (
-    <div className="card stat-card">
-      <div style={{ fontSize: "1.5rem" }}>{icon}</div>
-      <div className="stat-value" style={color ? { color } : {}}>
-        {value ?? "—"}
+    <div className="min-h-screen bg-gray-50">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-8 gap-4">
+          <div>
+            <h1 className="text-xl font-semibold text-gray-900">Dashboard</h1>
+            <p className="text-sm text-gray-400 mt-0.5">
+              {data.length} data points · {stats.total} anomalies detected
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            {DATE_RANGES.map(({ key, label }) => (
+              <button
+                key={key}
+                onClick={() => setRange(key)}
+                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${range === key
+                    ? "bg-gray-900 text-white"
+                    : "bg-white text-gray-500 border border-gray-200 hover:border-gray-300 hover:text-gray-700"
+                  }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Stats Cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
+          <StatCard
+            label="Total Anomalies"
+            value={stats.total}
+            sub={`across ${data.length} days`}
+            color="text-gray-900"
+            icon={
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+              </svg>
+            }
+          />
+          <StatCard
+            label="Critical Anomalies"
+            value={stats.critical}
+            sub="requires attention"
+            color="text-red-600"
+            icon={
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m0 3.75h.008v.008H12v-.008zM21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            }
+          />
+          <StatCard
+            label="Avg Engagement"
+            value={stats.avgEngagement.toLocaleString()}
+            sub="per data point"
+            color="text-gray-900"
+            icon={
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z" />
+              </svg>
+            }
+          />
+        </div>
+
+        {/* Main content grid */}
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+          {/* Chart area (3 cols) */}
+          <div className="lg:col-span-3 bg-white rounded-xl border border-gray-200 p-5">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-5 gap-3">
+              <div>
+                <h2 className="text-sm font-semibold text-gray-900">
+                  {METRICS.find((m) => m.key === metric)?.label} Over Time
+                </h2>
+                <p className="text-xs text-gray-400 mt-0.5">
+                  Red markers indicate detected anomalies
+                </p>
+              </div>
+              <div className="flex items-center gap-3 text-xs text-gray-400">
+                <span className="flex items-center gap-1">
+                  <span className="w-2.5 h-0.5 bg-indigo-500 rounded-full inline-block" /> Trend
+                </span>
+                <span className="flex items-center gap-1">
+                  <span className="w-2 h-2 rounded-full bg-red-500 inline-block" /> Anomaly
+                </span>
+                <span className="flex items-center gap-1">
+                  <span className="w-3 h-2 bg-indigo-100 rounded-sm inline-block" /> Band
+                </span>
+              </div>
+            </div>
+
+            <div className="w-full h-80">
+              <ResponsiveContainer width="100%" height="100%">
+                <ComposedChart data={data} margin={{ top: 10, right: 10, bottom: 0, left: -10 }}>
+                  <defs>
+                    <linearGradient id="bandFill" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#6366f1" stopOpacity={0.06} />
+                      <stop offset="100%" stopColor="#6366f1" stopOpacity={0.02} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+                  <XAxis
+                    dataKey="label"
+                    tick={{ fontSize: 11, fill: "#94a3b8" }}
+                    axisLine={{ stroke: "#e2e8f0" }}
+                    tickLine={false}
+                    interval={Math.max(Math.floor(data.length / 10), 0)}
+                  />
+                  <YAxis
+                    tick={{ fontSize: 11, fill: "#94a3b8" }}
+                    axisLine={false}
+                    tickLine={false}
+                    tickFormatter={(v) => (v >= 1000 ? `${(v / 1000).toFixed(1)}k` : v)}
+                  />
+                  <Tooltip content={<ChartTooltip />} />
+
+                  {/* Confidence band */}
+                  <Area
+                    dataKey="upper"
+                    stroke="none"
+                    fill="url(#bandFill)"
+                    isAnimationActive={false}
+                  />
+                  <Area
+                    dataKey="lower"
+                    stroke="none"
+                    fill="#fff"
+                    isAnimationActive={false}
+                  />
+
+                  {/* Main line */}
+                  <Line
+                    type="monotone"
+                    dataKey={metric}
+                    stroke="#6366f1"
+                    strokeWidth={1.5}
+                    dot={false}
+                    activeDot={{ r: 3, stroke: "#6366f1", fill: "#fff", strokeWidth: 1.5 }}
+                  />
+
+                  {/* Anomaly markers */}
+                  {anomalies.map((a, i) => (
+                    <ReferenceDot
+                      key={i}
+                      x={a.label}
+                      y={a[metric] || a.value}
+                      r={a.severity === "critical" ? 5 : 4}
+                      fill={a.severity === "critical" ? "#ef4444" : "#f59e0b"}
+                      stroke="#fff"
+                      strokeWidth={1.5}
+                    />
+                  ))}
+                </ComposedChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          {/* Controls sidebar (1 col) */}
+          <div className="lg:col-span-1 space-y-5">
+            {/* Metric selector */}
+            <div className="bg-white rounded-xl border border-gray-200 p-5">
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
+                Metric
+              </label>
+              <select
+                value={metric}
+                onChange={(e) => setMetric(e.target.value)}
+                className="w-full px-3 py-2 text-sm bg-gray-50 border border-gray-200 rounded-lg text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400 transition-colors"
+              >
+                {METRICS.map(({ key, label }) => (
+                  <option key={key} value={key}>{label}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Date range */}
+            <div className="bg-white rounded-xl border border-gray-200 p-5">
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
+                Date Range
+              </label>
+              <div className="grid grid-cols-2 gap-2">
+                {DATE_RANGES.map(({ key, label }) => (
+                  <button
+                    key={key}
+                    onClick={() => setRange(key)}
+                    className={`px-3 py-2 text-xs font-medium rounded-lg transition-colors ${range === key
+                        ? "bg-gray-900 text-white"
+                        : "bg-gray-50 text-gray-500 border border-gray-200 hover:bg-gray-100"
+                      }`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Sensitivity */}
+            <div className="bg-white rounded-xl border border-gray-200 p-5">
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
+                Sensitivity
+              </label>
+              <input
+                type="range"
+                min={10}
+                max={100}
+                value={sensitivity}
+                onChange={(e) => setSensitivity(Number(e.target.value))}
+                className="w-full h-1.5 bg-gray-200 rounded-full appearance-none cursor-pointer accent-indigo-500"
+              />
+              <div className="flex justify-between text-[10px] text-gray-400 mt-1.5">
+                <span>Low</span>
+                <span className="text-gray-600 font-medium">{sensitivity}%</span>
+                <span>High</span>
+              </div>
+            </div>
+
+            {/* Anomaly list */}
+            <div className="bg-white rounded-xl border border-gray-200 p-5">
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
+                Recent Anomalies
+              </label>
+              <div className="space-y-2.5 max-h-52 overflow-y-auto">
+                {anomalies.length === 0 && (
+                  <p className="text-xs text-gray-400">No anomalies in this range.</p>
+                )}
+                {anomalies.map((a, i) => (
+                  <div
+                    key={i}
+                    className="flex items-start gap-2.5 px-3 py-2.5 rounded-lg bg-gray-50 border border-gray-100"
+                  >
+                    <span
+                      className={`mt-0.5 w-2 h-2 rounded-full flex-shrink-0 ${a.severity === "critical" ? "bg-red-500" : "bg-amber-400"
+                        }`}
+                    />
+                    <div className="min-w-0">
+                      <p className="text-xs font-medium text-gray-800 truncate">
+                        {a.label}
+                      </p>
+                      <p className="text-[10px] text-gray-400">
+                        {a.severity} · value {a.value.toLocaleString()}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
-      <div className="stat-label">{label}</div>
+    </div>
+  );
+}
+
+/* ─── Stat Card ──────────────────────────────────────────────── */
+
+function StatCard({ label, value, sub, color, icon }) {
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 px-5 py-4 flex items-start gap-4">
+      <div className="w-9 h-9 rounded-lg bg-gray-50 text-gray-400 flex items-center justify-center flex-shrink-0 mt-0.5">
+        {icon}
+      </div>
+      <div>
+        <p className="text-xs font-medium text-gray-400 mb-0.5">{label}</p>
+        <p className={`text-2xl font-semibold ${color}`}>{value}</p>
+        <p className="text-[10px] text-gray-400 mt-0.5">{sub}</p>
+      </div>
     </div>
   );
 }
