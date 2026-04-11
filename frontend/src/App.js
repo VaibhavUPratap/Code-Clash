@@ -1,22 +1,25 @@
-import React from "react";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-import Navbar from "./components/Navbar";
-import HomePage from "./pages/HomePage";
-import DashboardPage from "./pages/DashboardPage";
-import AlertsPage from "./pages/AlertsPage";
-import InsightsPage from "./pages/InsightsPage";
+import React, { useState } from 'react';
+import './index.css';
+import Upload from './components/Upload';
+import Dashboard from './components/Dashboard';
 
-export default function App() {
+function App() {
+  const [anomalies, setAnomalies] = useState([]);
+
   return (
-    <BrowserRouter>
-      <Navbar />
-      <Routes>
-        <Route path="/"          element={<HomePage />} />
-        <Route path="/dashboard" element={<DashboardPage />} />
-        <Route path="/alerts"    element={<AlertsPage />} />
-        <Route path="/insights"  element={<InsightsPage />} />
-        <Route path="*"          element={<Navigate to="/" replace />} />
-      </Routes>
-    </BrowserRouter>
+    <div className="app-container">
+      <header>
+        <h1>Social Media Trend Anomaly Finder</h1>
+        <p className="subtitle">Crisis & Bot Intelligence System</p>
+      </header>
+      
+      <Upload onAnalyzeSuccess={(data) => setAnomalies(data)} />
+      
+      {anomalies.length > 0 && (
+         <Dashboard anomalies={anomalies} />
+      )}
+    </div>
   );
 }
+
+export default App;
