@@ -124,7 +124,7 @@ export default function HomePage() {
           >
             {loading ? (
               <>
-                <span className="btn-spinner" /> Analysing…
+                <span className="btn-spinner" /> Analyzing…
               </>
             ) : (
               "🚀 Run Analysis"

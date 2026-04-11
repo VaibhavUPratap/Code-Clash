@@ -84,7 +84,7 @@ export default function DashboardPage() {
 
       {/* Summary stats */}
       <div className="grid-4" style={{ marginBottom: "1.5rem" }}>
-        <StatCard icon="📆" label="Days Analysed"   value={summary?.total_days} />
+        <StatCard icon="📆" label="Days Analyzed"   value={summary?.total_days} />
         <StatCard icon="⚡" label="Anomalies Found"  value={summary?.total_anomalies} color="#6366f1" />
         <StatCard icon="🔴" label="Critical"          value={summary?.severity_breakdown?.critical} color="#ef4444" />
         <StatCard icon="🟡" label="Medium"            value={summary?.severity_breakdown?.medium}   color="#f59e0b" />
