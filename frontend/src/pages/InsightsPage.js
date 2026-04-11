@@ -165,7 +165,7 @@ export default function InsightsPage() {
                     <td><span className={`badge badge-${a.severity}`}>{a.severity}</span></td>
                     <td>
                       <span className={`badge badge-${ins.type || "viral"}`}>
-                        {TYPE_ICON[ins.type]} {ins.type || "—"}
+                        {TYPE_ICON[ins.type] || ""} {ins.type || "—"}
                       </span>
                     </td>
                     <td><span className={`badge badge-${ins.confidence || "low"}`}>{ins.confidence || "—"}</span></td>

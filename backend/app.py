@@ -1,3 +1,4 @@
+import os
 from flask import Flask
 from flask_cors import CORS
 from routes.api_routes import api_bp
@@ -12,4 +13,5 @@ def create_app():
 
 if __name__ == "__main__":
     app = create_app()
-    app.run(debug=True, host="0.0.0.0", port=5000)
+    debug = os.getenv("FLASK_DEBUG", "false").lower() == "true"
+    app.run(debug=debug, host="0.0.0.0", port=5000)
