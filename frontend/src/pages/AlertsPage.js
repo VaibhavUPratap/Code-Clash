@@ -1,94 +1,4 @@
-import React, { useState, useMemo } from "react";
-
-/* ─── Mock Data ──────────────────────────────────────────────── */
-
-// Generates logs that look like a monitoring system output
-const MOCK_ALERTS = [
-  {
-    id: "alrt_982b1c",
-    timestamp: "2026-04-11T14:22:05Z",
-    metric: "Likes",
-    type: "spike",
-    severity: "critical",
-    zScore: 6.42,
-    value: 12450,
-    expected: 3200,
-    cause: "Viral hashtag campaign detected (#TechLaunch26).",
-    duration: "2h 15m",
-  },
-  {
-    id: "alrt_982b1d",
-    timestamp: "2026-04-11T09:15:22Z",
-    metric: "Comments",
-    type: "spike",
-    severity: "medium",
-    zScore: 3.85,
-    value: 840,
-    expected: 210,
-    cause: "Unusually high engagement on product announcement post.",
-    duration: "45m",
-  },
-  {
-    id: "alrt_982b1e",
-    timestamp: "2026-04-10T22:05:11Z",
-    metric: "Shares",
-    type: "drop",
-    severity: "low",
-    zScore: -2.15,
-    value: 15,
-    expected: 140,
-    cause: "Platform algorithm change suppressing reach (suspected).",
-    duration: "6h 30m",
-  },
-  {
-    id: "alrt_982b1f",
-    timestamp: "2026-04-10T11:45:00Z",
-    metric: "Engagement",
-    type: "spike",
-    severity: "critical",
-    zScore: 7.12,
-    value: 45000,
-    expected: 12000,
-    cause: "Coordinated bot activity targeting recent giveaway.",
-    duration: "1h 10m",
-  },
-  {
-    id: "alrt_982b20",
-    timestamp: "2026-04-09T08:30:45Z",
-    metric: "Sentiment",
-    type: "drop",
-    severity: "critical",
-    zScore: -5.88,
-    value: 12,
-    expected: 65,
-    cause: "Negative PR sentiment spike following service outage.",
-    duration: "14h 20m",
-  },
-  {
-    id: "alrt_982b21",
-    timestamp: "2026-04-08T16:20:10Z",
-    metric: "Likes",
-    type: "spike",
-    severity: "medium",
-    zScore: 4.05,
-    value: 8200,
-    expected: 2400,
-    cause: "Organic reshare by influencer account.",
-    duration: "3h 45m",
-  },
-  {
-    id: "alrt_982b22",
-    timestamp: "2026-04-07T14:10:05Z",
-    metric: "Mentions",
-    type: "drop",
-    severity: "low",
-    zScore: -2.01,
-    value: 45,
-    expected: 180,
-    cause: "Normal weekend activity dip.",
-    duration: "48h",
-  },
-];
+import React, { useState, useEffect, useMemo } from "react";
 
 /* ─── Helpers ────────────────────────────────────────────────── */
 
@@ -106,13 +16,11 @@ const SEVERITY_DOTS = {
 
 function formatDate(isoString) {
   const d = new Date(isoString);
+  // Support both YYYY-MM-DD and true ISO timestamps cleanly
   return d.toLocaleString("en-US", {
     month: "short",
     day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: false,
+    year: "numeric",
   });
 }
 
@@ -149,7 +57,7 @@ function AlertRow({ alert }) {
         </div>
 
         <div className="w-1/6 min-w-[100px]">
-          <span className="text-sm font-medium text-gray-900">{alert.metric}</span>
+          <span className="text-sm font-medium text-gray-900 capitalize">{alert.metric}</span>
         </div>
 
         <div className="w-1/6 min-w-[100px] flex items-center gap-1.5">
@@ -189,7 +97,7 @@ function AlertRow({ alert }) {
               <p className="text-gray-500 font-medium mb-1 text-xs uppercase tracking-wider">Values</p>
               <p className="text-gray-900 font-mono">
                 Actual: {alert.value.toLocaleString()} <br />
-                Expected: {alert.expected.toLocaleString()}
+                Expected Baseline: ~{Math.round(alert.expected).toLocaleString()}
               </p>
             </div>
             <div>
@@ -223,14 +131,54 @@ function AlertRow({ alert }) {
 export default function AlertsPage() {
   const [onlyCritical, setOnlyCritical] = useState(false);
   const [filterType, setFilterType] = useState("all");
+  const [alerts, setAlerts] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    fetch("http://localhost:5000/api/get-results")
+      .then((res) => res.json())
+      .then((result) => {
+        if (result.status !== "ok" || !result.anomalies) {
+          setLoading(false);
+          return;
+        }
+        
+        const allAlerts = result.anomalies.map((a, i) => {
+          const severity = Math.abs(a.z_score) > 3 ? "critical" : "medium";
+          
+          return {
+            id: `alrt_${a.metric}_${i}_${a.date.replace(/-/g, "")}`,
+            timestamp: a.date,
+            metric: a.metric,
+            type: a.type,
+            severity: severity,
+            zScore: a.z_score,
+            value: a.value,
+            expected: a.baseline_mean,
+            cause: a.ai_insight ? a.ai_insight.cause : `Automated statistical ${a.type} detection via Z-score analysis.`,
+            duration: "End of day batch", // Simplified since data is daily
+          };
+        });
+        
+        // Sort newest first
+        allAlerts.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+        
+        setAlerts(allAlerts);
+        setLoading(false);
+      })
+      .catch((e) => {
+        console.error("Error fetching alerts:", e);
+        setLoading(false);
+      });
+  }, []);
 
   const filteredAlerts = useMemo(() => {
-    return MOCK_ALERTS.filter((a) => {
+    return alerts.filter((a) => {
       if (onlyCritical && a.severity !== "critical") return false;
       if (filterType !== "all" && a.type !== filterType) return false;
       return true;
     });
-  }, [onlyCritical, filterType]);
+  }, [onlyCritical, filterType, alerts]);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -249,28 +197,31 @@ export default function AlertsPage() {
           <div className="flex items-center gap-2">
             <button
               onClick={() => setFilterType("all")}
-              className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${filterType === "all"
+              className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                filterType === "all"
                   ? "bg-gray-100 text-gray-900"
                   : "text-gray-500 hover:bg-gray-50 hover:text-gray-700"
-                }`}
+              }`}
             >
               All Types
             </button>
             <button
               onClick={() => setFilterType("spike")}
-              className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${filterType === "spike"
+              className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                filterType === "spike"
                   ? "bg-indigo-50 text-indigo-700"
                   : "text-gray-500 hover:bg-gray-50 hover:text-gray-700"
-                }`}
+              }`}
             >
               Spikes
             </button>
             <button
               onClick={() => setFilterType("drop")}
-              className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${filterType === "drop"
+              className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
+                filterType === "drop"
                   ? "bg-emerald-50 text-emerald-700"
                   : "text-gray-500 hover:bg-gray-50 hover:text-gray-700"
-                }`}
+              }`}
             >
               Drops
             </button>
@@ -286,12 +237,14 @@ export default function AlertsPage() {
                 onChange={(e) => setOnlyCritical(e.target.checked)}
               />
               <div
-                className={`block w-10 h-6 rounded-full transition-colors ${onlyCritical ? "bg-red-500" : "bg-gray-200"
-                  }`}
+                className={`block w-10 h-6 rounded-full transition-colors ${
+                  onlyCritical ? "bg-red-500" : "bg-gray-200"
+                }`}
               />
               <div
-                className={`absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform ${onlyCritical ? "translate-x-4" : ""
-                  }`}
+                className={`absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform ${
+                  onlyCritical ? "translate-x-4" : ""
+                }`}
               />
             </div>
             <span className="text-sm font-medium text-gray-700">Only Critical</span>
@@ -319,7 +272,11 @@ export default function AlertsPage() {
 
         {/* Alert List */}
         <div className="bg-white border-x border-b border-gray-200 rounded-b-xl overflow-hidden shadow-sm">
-          {filteredAlerts.length === 0 ? (
+          {loading ? (
+             <div className="px-6 py-12 text-center text-gray-500 text-sm">
+               Loading system alerts from detection models...
+             </div>
+          ) : filteredAlerts.length === 0 ? (
             <div className="px-6 py-12 text-center text-gray-500 text-sm">
               No alerts match the current filters.
             </div>

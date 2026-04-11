@@ -9,6 +9,8 @@ export default function HomePage() {
   const [username, setUsername] = useState("");
   const [file, setFile] = useState(null);
   const [dragOver, setDragOver] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
   const fileRef = useRef(null);
 
   function handleDrop(e) {
@@ -17,6 +19,39 @@ export default function HomePage() {
     const droppedFile = e.dataTransfer.files[0];
     if (droppedFile?.name.endsWith(".csv")) setFile(droppedFile);
   }
+
+  const handleStartAnalysis = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const formData = new FormData();
+      if (file) {
+        formData.append("file", file);
+      } else if (username) {
+        formData.append("source", "reddit");
+        formData.append("sub", username);
+      } else {
+        formData.append("source", "sample");
+      }
+
+      const res = await fetch("http://localhost:5000/api/analyze", {
+        method: "POST",
+        body: formData,
+      });
+
+      const data = await res.json();
+      if (res.ok && data.status !== "error") {
+        navigate("/dashboard");
+      } else {
+        setError(data.message || "Analysis failed.");
+      }
+    } catch (err) {
+      console.error(err);
+      setError("Failed to connect to the server.");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-white">
@@ -107,11 +142,11 @@ export default function HomePage() {
 
             {/* Username */}
             <label className="block text-sm font-medium text-gray-700 mb-1.5">
-              Username <span className="text-gray-400 font-normal">(optional)</span>
+              Subreddit <span className="text-gray-400 font-normal">(optional)</span>
             </label>
             <input
               type="text"
-              placeholder="e.g. @johndoe"
+              placeholder="e.g. worldnews"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               className="w-full px-4 py-2.5 rounded-lg border border-gray-200 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-colors"
@@ -150,11 +185,18 @@ export default function HomePage() {
               )}
             </div>
 
+            {error && (
+              <p className="text-sm text-red-600 mt-4 text-center">{error}</p>
+            )}
+
             <button
-              onClick={() => navigate("/dashboard")}
-              className="w-full mt-6 px-6 py-3 text-sm font-semibold text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 transition-colors"
+              onClick={handleStartAnalysis}
+              disabled={loading}
+              className={`w-full mt-6 px-6 py-3 text-sm font-semibold text-white rounded-lg transition-colors ${
+                loading ? "bg-indigo-400 cursor-not-allowed" : "bg-indigo-600 hover:bg-indigo-700"
+              }`}
             >
-              Start Analysis
+              {loading ? "Analyzing..." : "Start Analysis"}
             </button>
           </div>
         </div>

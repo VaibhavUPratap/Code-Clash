@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
   ComposedChart,
   Line,
@@ -11,58 +11,13 @@ import {
   ReferenceDot,
 } from "recharts";
 
-/* ─── Mock time-series data ──────────────────────────────────── */
-
-function generateData() {
-  const base = 3200;
-  const points = [];
-  const startDate = new Date("2026-01-01");
-  for (let i = 0; i < 90; i++) {
-    const d = new Date(startDate);
-    d.setDate(d.getDate() + i);
-    const dateStr = d.toISOString().slice(0, 10);
-
-    const noise = Math.sin(i * 0.3) * 400 + (Math.random() - 0.5) * 300;
-    let value = Math.round(base + noise + i * 8);
-    let isAnomaly = false;
-    let severity = null;
-
-    // Inject anomalies at specific points
-    if (i === 14) { value = 7200; isAnomaly = true; severity = "critical"; }
-    if (i === 32) { value = 1100; isAnomaly = true; severity = "critical"; }
-    if (i === 51) { value = 6800; isAnomaly = true; severity = "medium"; }
-    if (i === 67) { value = 7800; isAnomaly = true; severity = "critical"; }
-    if (i === 78) { value = 5900; isAnomaly = true; severity = "medium"; }
-
-    // Confidence band
-    const upper = value + 600 + Math.random() * 200;
-    const lower = Math.max(value - 600 - Math.random() * 200, 400);
-
-    points.push({
-      date: dateStr,
-      label: `${d.toLocaleString("default", { month: "short" })} ${d.getDate()}`,
-      value,
-      upper,
-      lower,
-      band: [lower, upper],
-      isAnomaly,
-      severity,
-      // Additional metrics
-      engagement: Math.round(value * 0.7 + Math.random() * 200),
-      mentions: Math.round(value * 0.3 + Math.random() * 100),
-      sentiment: +(50 + Math.sin(i * 0.15) * 20 + (Math.random() - 0.5) * 10).toFixed(1),
-    });
-  }
-  return points;
-}
-
-const RAW_DATA = generateData();
+/* ─── Config ─────────────────────────────────────────────────── */
 
 const METRICS = [
-  { key: "value", label: "Activity" },
-  { key: "engagement", label: "Engagement" },
-  { key: "mentions", label: "Mentions" },
-  { key: "sentiment", label: "Sentiment" },
+  { key: "likes", label: "Likes" },
+  { key: "comments", label: "Comments" },
+  { key: "shares", label: "Shares" },
+  { key: "posts", label: "Posts" },
 ];
 
 const DATE_RANGES = [
@@ -84,7 +39,7 @@ function getStats(data) {
   const anomalies = data.filter((d) => d.isAnomaly);
   const critical = anomalies.filter((d) => d.severity === "critical").length;
   const values = data.map((d) => d.value);
-  const avg = Math.round(values.reduce((a, b) => a + b, 0) / values.length);
+  const avg = values.length ? Math.round(values.reduce((a, b) => a + b, 0) / values.length) : 0;
   return {
     total: anomalies.length,
     critical,
@@ -105,7 +60,7 @@ function ChartTooltip({ active, payload, label }) {
         <p>Value: <span className="text-gray-900 font-medium">{d.value?.toLocaleString()}</span></p>
         {d.isAnomaly && (
           <p className="text-red-600 font-semibold mt-1">
-            ⚠ {d.severity === "critical" ? "Critical" : "Medium"} anomaly
+            ⚠ {d.severity === "critical" ? "Critical" : "Medium"} anomaly ({d.z_score > 0 ? "+" : ""}{d.z_score}z)
           </p>
         )}
       </div>
@@ -116,13 +71,62 @@ function ChartTooltip({ active, payload, label }) {
 /* ─── Dashboard Page ─────────────────────────────────────────── */
 
 export default function DashboardPage() {
-  const [metric, setMetric] = useState("value");
+  const [metric, setMetric] = useState("likes");
   const [range, setRange] = useState("all");
   const [sensitivity, setSensitivity] = useState(50);
+  const [rawData, setRawData] = useState([]);
 
-  const data = useMemo(() => filterByRange(RAW_DATA, range), [range]);
+  useEffect(() => {
+    fetch("http://localhost:5000/api/get-results")
+      .then((res) => res.json())
+      .then((result) => {
+        if (result.status !== "ok" || !result.data) return;
+        
+        const data_points = result.data;
+        // Filter anomalies for the currently selected metric
+        const anomalies = (result.anomalies || []).filter(a => a.metric === metric);
+        
+        const anomalyMap = {};
+        anomalies.forEach((a) => {
+          anomalyMap[a.date] = a;
+        });
+
+        const points = data_points.map((dp) => {
+          const dateObj = new Date(dp.date);
+          const isAnomaly = !!anomalyMap[dp.date];
+          const aInfo = anomalyMap[dp.date];
+          
+          let severity = null;
+          if (aInfo) {
+             severity = Math.abs(aInfo.z_score) > 3 ? "critical" : "medium";
+          }
+
+          return {
+            ...dp,
+            label: `${dateObj.toLocaleString("default", { month: "short" })} ${dateObj.getDate()}`,
+            value: dp[metric],
+            // Create a pseudo-band roughly based on typical variation or constant relative size
+            upper: dp[metric] + (dp[metric] * 0.15 + 50),
+            lower: Math.max(0, dp[metric] - (dp[metric] * 0.15 + 50)),
+            isAnomaly,
+            severity,
+            z_score: aInfo ? aInfo.z_score : 0,
+          };
+        });
+        setRawData(points);
+      })
+      .catch((err) => console.error("Error fetching data:", err));
+  }, [metric]);
+
+  const data = useMemo(() => filterByRange(rawData, range), [range, rawData]);
   const stats = useMemo(() => getStats(data), [data]);
-  const anomalies = useMemo(() => data.filter((d) => d.isAnomaly), [data]);
+  
+  // Apply additional sensitivity filter on frontend for anomalies shown in the list
+  const anomalies = useMemo(() => {
+     // Sensitivity 100 = show everything (Z > 2), Sensitivity 10 = show only extreme anomalies
+     const zThreshold = 2 + ((100 - sensitivity) / 100) * 3; // scales from Z=2 to Z=5
+     return data.filter((d) => d.isAnomaly && Math.abs(d.z_score) >= zThreshold);
+  }, [data, sensitivity]);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -140,10 +144,11 @@ export default function DashboardPage() {
               <button
                 key={key}
                 onClick={() => setRange(key)}
-                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${range === key
+                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+                  range === key
                     ? "bg-gray-900 text-white"
                     : "bg-white text-gray-500 border border-gray-200 hover:border-gray-300 hover:text-gray-700"
-                  }`}
+                }`}
               >
                 {label}
               </button>
@@ -176,7 +181,7 @@ export default function DashboardPage() {
             }
           />
           <StatCard
-            label="Avg Engagement"
+            label="Avg Value"
             value={stats.avgEngagement.toLocaleString()}
             sub="per data point"
             color="text-gray-900"
@@ -308,10 +313,11 @@ export default function DashboardPage() {
                   <button
                     key={key}
                     onClick={() => setRange(key)}
-                    className={`px-3 py-2 text-xs font-medium rounded-lg transition-colors ${range === key
+                    className={`px-3 py-2 text-xs font-medium rounded-lg transition-colors ${
+                      range === key
                         ? "bg-gray-900 text-white"
                         : "bg-gray-50 text-gray-500 border border-gray-200 hover:bg-gray-100"
-                      }`}
+                    }`}
                   >
                     {label}
                   </button>
@@ -354,15 +360,16 @@ export default function DashboardPage() {
                     className="flex items-start gap-2.5 px-3 py-2.5 rounded-lg bg-gray-50 border border-gray-100"
                   >
                     <span
-                      className={`mt-0.5 w-2 h-2 rounded-full flex-shrink-0 ${a.severity === "critical" ? "bg-red-500" : "bg-amber-400"
-                        }`}
+                      className={`mt-0.5 w-2 h-2 rounded-full flex-shrink-0 ${
+                        a.severity === "critical" ? "bg-red-500" : "bg-amber-400"
+                      }`}
                     />
                     <div className="min-w-0">
                       <p className="text-xs font-medium text-gray-800 truncate">
                         {a.label}
                       </p>
                       <p className="text-[10px] text-gray-400">
-                        {a.severity} · value {a.value.toLocaleString()}
+                        {a.severity} · {metric} {a.value?.toLocaleString()}
                       </p>
                     </div>
                   </div>
