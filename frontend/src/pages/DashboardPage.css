@@ -1,0 +1,30 @@
+.chart-card { margin-top: 1rem; }
+
+.chart-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+  gap: .5rem;
+}
+
+.chart-title { font-size: 1.05rem; font-weight: 600; }
+
+.metric-tabs { display: flex; gap: .35rem; flex-wrap: wrap; }
+
+.tab-btn {
+  padding: .35rem .9rem;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted);
+  font-size: .85rem;
+  text-transform: capitalize;
+  transition: all .15s;
+}
+
+.tab-btn:hover  { color: var(--text); border-color: var(--accent); }
+.tab-btn.active { color: var(--text); background: rgba(99,102,241,.15); border-color: var(--accent); }
+
+.chart-legend { font-size: .8rem; color: var(--muted); margin-top: .5rem; }
