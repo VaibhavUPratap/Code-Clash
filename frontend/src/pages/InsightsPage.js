@@ -1,180 +1,157 @@
-import React, { useEffect, useState, useMemo } from "react";
-import { useNavigate } from "react-router-dom";
-import Plot from "react-plotly.js";
-import "./InsightsPage.css";
+import React from "react";
 
-const TYPE_ICON = { viral: "🚀", bot: "🤖", crisis: "⚠️" };
-const TYPE_COLOR = { viral: "#6366f1", bot: "#ef4444", crisis: "#f59e0b" };
+/* ─── Mock Data ──────────────────────────────────────────────── */
 
-export default function InsightsPage() {
-  const [result, setResult] = useState(null);
-  const navigate            = useNavigate();
+// Generates simple, human-readable explanations rather than generic "AI" text
+const INSIGHTS = [
+  {
+    id: "ins_101",
+    date: "Apr 11, 2026",
+    metric: "Engagement",
+    explanation:
+      "This massive spike in engagement happened over just 1 hour. It looks highly unnatural, driven primarily by repetitive, rapid-fire comments from newly created accounts.",
+    classification: "Bot Activity",
+    botProbability: 92, // percentage
+  },
+  {
+    id: "ins_102",
+    date: "Apr 09, 2026",
+    metric: "Sentiment",
+    explanation:
+      "A sharp drop in sentiment occurred alongside an increase in mentions. This pattern usually points to a PR issue or a negative news story gaining traction.",
+    classification: "Possible Crisis",
+    botProbability: 14,
+  },
+  {
+    id: "ins_103",
+    date: "Apr 05, 2026",
+    metric: "Shares",
+    explanation:
+      "Shares doubled compared to the baseline, but the growth was sustained over 48 hours with healthy sentiment. This is a classic organic viral trend.",
+    classification: "Viral",
+    botProbability: 8,
+  },
+  {
+    id: "ins_104",
+    date: "Mar 28, 2026",
+    metric: "Likes",
+    explanation:
+      "A brief, sudden burst of likes from international IPs on a region-specific post. The traffic stopped as abruptly as it began.",
+    classification: "Bot Activity",
+    botProbability: 85,
+  },
+  {
+    id: "ins_105",
+    date: "Mar 15, 2026",
+    metric: "Comments",
+    explanation:
+      "Steady, compounding increase in comments driven by a community discussion. The pattern matches organic platform reach algorithms.",
+    classification: "Viral",
+    botProbability: 12,
+  },
+];
 
-  useEffect(() => {
-    const stored = sessionStorage.getItem("analysisResult");
-    if (!stored) { navigate("/"); return; }
-    setResult(JSON.parse(stored));
-  }, [navigate]);
+/* ─── Helpers ────────────────────────────────────────────────── */
 
-  const { typeCounts, confidenceCounts } = useMemo(() => {
-    if (!result) return { typeCounts: {}, confidenceCounts: {} };
-    const anomalies = result.anomalies || [];
-    const tc = { viral: 0, bot: 0, crisis: 0 };
-    const cc = { low: 0, medium: 0, high: 0 };
-    anomalies.forEach((a) => {
-      const t = a.ai_insight?.type;
-      const c = a.ai_insight?.confidence;
-      if (t && tc[t] !== undefined) tc[t]++;
-      if (c && cc[c] !== undefined) cc[c]++;
-    });
-    return { typeCounts: tc, confidenceCounts: cc };
-  }, [result]);
+const CLASSIFICATION_STYLES = {
+  "Bot Activity": "bg-red-50 text-red-700 border-red-200",
+  "Possible Crisis": "bg-amber-50 text-amber-700 border-amber-200",
+  "Viral": "bg-emerald-50 text-emerald-700 border-emerald-200",
+};
 
-  if (!result) return null;
+/* ─── Components ─────────────────────────────────────────────── */
 
-  const anomalies = result.anomalies || [];
-  const criticals = anomalies.filter((a) => a.severity === "critical");
-
-  const pieData = [
-    {
-      type: "pie",
-      labels: Object.keys(typeCounts).map(
-        (k) => `${TYPE_ICON[k] || ""} ${k}`
-      ),
-      values: Object.values(typeCounts),
-      marker: { colors: ["#6366f1", "#ef4444", "#f59e0b"] },
-      hole: 0.5,
-      textinfo: "label+percent",
-      textposition: "outside",
-    },
-  ];
-
-  const pieLayout = {
-    paper_bgcolor: "transparent",
-    plot_bgcolor: "transparent",
-    font: { color: "#e2e8f0", family: "Inter, sans-serif", size: 12 },
-    showlegend: false,
-    margin: { t: 10, b: 10, l: 10, r: 10 },
-    height: 260,
-  };
-
-  const barData = [
-    {
-      type: "bar",
-      x: ["Low", "Medium", "High"],
-      y: [confidenceCounts.low, confidenceCounts.medium, confidenceCounts.high],
-      marker: { color: ["#22c55e", "#f59e0b", "#ef4444"] },
-    },
-  ];
-
-  const barLayout = {
-    paper_bgcolor: "transparent",
-    plot_bgcolor: "transparent",
-    font: { color: "#e2e8f0", family: "Inter, sans-serif", size: 12 },
-    xaxis: { gridcolor: "#2a2d3a" },
-    yaxis: { gridcolor: "#2a2d3a", dtick: 1 },
-    margin: { t: 10, b: 40, l: 40, r: 10 },
-    height: 220,
-  };
+function InsightCard({ insight }) {
+  // Determine progress bar color based on probability
+  const barColor =
+    insight.botProbability >= 70
+      ? "bg-red-500"
+      : insight.botProbability >= 30
+        ? "bg-amber-400"
+        : "bg-emerald-500";
 
   return (
-    <div className="page">
-      <h1 className="page-title">
-        🤖 AI Insights
-        <span className="page-sub"> · AI-powered cause analysis</span>
-      </h1>
+    <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm hover:shadow-md transition-shadow">
+      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-6">
 
-      {/* Charts row */}
-      <div className="insights-charts grid-2">
-        <div className="card">
-          <h3 className="chart-heading">Anomaly Type Distribution</h3>
-          <Plot
-            data={pieData}
-            layout={pieLayout}
-            config={{ responsive: true, displayModeBar: false }}
-            style={{ width: "100%" }}
-          />
+        {/* Left side: Header, Metric, Explanation */}
+        <div className="flex-1 space-y-4">
+          <div className="flex items-center gap-3 border-b border-gray-100 pb-3">
+            <span className="text-sm font-semibold text-gray-900">
+              {insight.metric} Anomaly
+            </span>
+            <span className="text-xs text-gray-400 font-mono tracking-tight">
+              {insight.date}
+            </span>
+          </div>
+
+          <p className="text-sm text-gray-700 leading-relaxed max-w-2xl">
+            {insight.explanation}
+          </p>
         </div>
-        <div className="card">
-          <h3 className="chart-heading">AI Confidence Levels</h3>
-          <Plot
-            data={barData}
-            layout={barLayout}
-            config={{ responsive: true, displayModeBar: false }}
-            style={{ width: "100%" }}
-          />
+
+        {/* Right side: Classification & Bot Prob */}
+        <div className="w-full sm:w-64 flex-shrink-0 flex flex-col gap-5 pt-1 sm:pt-0 border-t sm:border-t-0 sm:border-l border-gray-100 sm:pl-6">
+
+          {/* Classification Tag */}
+          <div>
+            <p className="text-[10px] uppercase tracking-wider font-semibold text-gray-400 mb-2">
+              Classification
+            </p>
+            <div
+              className={`inline-flex items-center px-2.5 py-1 rounded-md border text-xs font-medium ${CLASSIFICATION_STYLES[insight.classification] || "bg-gray-50 text-gray-700 border-gray-200"
+                }`}
+            >
+              {insight.classification}
+            </div>
+          </div>
+
+          {/* Bot Probability */}
+          <div>
+            <p className="text-[10px] uppercase tracking-wider font-semibold text-gray-400 mb-2 flex justify-between">
+              <span>Bot Probability</span>
+              <span className="text-gray-900">{insight.botProbability}%</span>
+            </p>
+            <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
+              <div
+                className={`h-full ${barColor} rounded-full transition-all duration-500`}
+                style={{ width: `${insight.botProbability}%` }}
+              />
+            </div>
+            {insight.botProbability >= 70 && (
+              <p className="text-[10px] text-red-500 mt-1.5 font-medium">
+                High likelihood of artificial inflation.
+              </p>
+            )}
+          </div>
+
         </div>
       </div>
+    </div>
+  );
+}
 
-      {/* Critical events spotlight */}
-      {criticals.length > 0 && (
-        <div className="card spotlight">
-          <h3 className="chart-heading">🔴 Critical Events Spotlight</h3>
-          <div className="spotlight-list">
-            {criticals.map((a, i) => {
-              const insight = a.ai_insight || {};
-              const color   = TYPE_COLOR[insight.type] || "var(--accent)";
-              return (
-                <div key={i} className="spotlight-item">
-                  <div className="si-left" style={{ borderColor: color }}>
-                    <div className="si-icon">{TYPE_ICON[insight.type] || "📊"}</div>
-                    <div className="si-type" style={{ color }}>{insight.type || "unknown"}</div>
-                  </div>
-                  <div className="si-body">
-                    <div className="si-header">
-                      <span className="si-date">{a.date}</span>
-                      <span className="si-metric">{a.metric}</span>
-                      <span className={`si-change ${a.pct_change >= 0 ? "pos" : "neg"}`}>
-                        {a.pct_change >= 0 ? "▲" : "▼"}{Math.abs(a.pct_change)}%
-                      </span>
-                    </div>
-                    <p className="si-cause">{insight.cause}</p>
-                    <p className="si-rec">💡 {insight.recommendation}</p>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+/* ─── Insights Page ──────────────────────────────────────────── */
+
+export default function InsightsPage() {
+  return (
+    <div className="min-h-screen bg-gray-50/50">
+      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
+        {/* Header */}
+        <div className="mb-8">
+          <h1 className="text-2xl font-semibold text-gray-900 tracking-tight">
+            Anomaly Insights
+          </h1>
+          <p className="text-sm text-gray-500 mt-2 max-w-xl leading-relaxed">
+            Plain-English explanations for detected anomalies. We analyze the shape of the spike, account age, and velocity to tell you <i>why</i> it happened.
+          </p>
         </div>
-      )}
 
-      {/* All insights table */}
-      <div className="card">
-        <h3 className="chart-heading">All Insights ({anomalies.length})</h3>
-        <div className="insights-table-wrap">
-          <table className="insights-table">
-            <thead>
-              <tr>
-                <th>Date</th>
-                <th>Metric</th>
-                <th>Type</th>
-                <th>Severity</th>
-                <th>AI Type</th>
-                <th>Confidence</th>
-                <th>Cause</th>
-              </tr>
-            </thead>
-            <tbody>
-              {anomalies.map((a, i) => {
-                const ins = a.ai_insight || {};
-                return (
-                  <tr key={i}>
-                    <td>{a.date}</td>
-                    <td>{a.metric}</td>
-                    <td><span className={`badge badge-${a.type}`}>{a.type}</span></td>
-                    <td><span className={`badge badge-${a.severity}`}>{a.severity}</span></td>
-                    <td>
-                      <span className={`badge badge-${ins.type || "viral"}`}>
-                        {TYPE_ICON[ins.type] || ""} {ins.type || "—"}
-                      </span>
-                    </td>
-                    <td><span className={`badge badge-${ins.confidence || "low"}`}>{ins.confidence || "—"}</span></td>
-                    <td className="cause-cell">{ins.cause || "—"}</td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+        {/* Vertical Card Layout */}
+        <div className="space-y-5">
+          {INSIGHTS.map((insight) => (
+            <InsightCard key={insight.id} insight={insight} />
+          ))}
         </div>
       </div>
     </div>
