@@ -20,8 +20,8 @@ module.exports = {
       },
       keyframes: {
         'glow-pulse': {
-          '0%, 100%': { opacity: 1, filter: 'brightness(1)' },
-          '50%': { opacity: 0.8, filter: 'brightness(1.5)' },
+          '0%, 100%': { opacity: 1, transform: 'scale(1)' },
+          '50%': { opacity: 0.8, transform: 'scale(1.01)' },
         },
         'float': {
           '0%, 100%': { transform: 'translateY(0)' },

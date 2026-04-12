@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { analyzeData } from "../services/api";
@@ -62,14 +62,15 @@ export default function HomePage() {
   ];
 
   return (
-    <div className="flex-1 w-full flex flex-col items-center justify-start overflow-y-auto px-6 py-12 md:py-20 lg:py-32">
+    <div className="page-shell">
+      <div className="page-container-wide flex flex-col items-center justify-start">
       
       {/* Hero Section — High Impact */}
       <motion.div 
         initial={{ opacity: 0, y: 30 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.8, ease: "easeOut" }}
-        className="max-w-4xl text-center mb-24 relative"
+        transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+        className="max-w-4xl text-center mb-16 relative"
       >
         <div className="absolute -top-12 left-1/2 -translate-x-1/2 px-4 py-1.5 bg-indigo-500/10 border border-indigo-500/20 rounded-full text-[10px] font-black text-indigo-400 uppercase tracking-[0.4em] mb-8 shadow-[0_0_20px_rgba(99,102,241,0.2)]">
             Intelligence v4.0
@@ -86,13 +87,13 @@ export default function HomePage() {
       </motion.div>
 
       {/* Main Analysis Engine */}
-      <div className="w-full max-w-6xl grid grid-cols-1 lg:grid-cols-12 gap-12 items-start transition-all duration-700">
+      <div className="w-full max-w-6xl grid grid-cols-1 lg:grid-cols-12 gap-6 md:gap-8 lg:gap-10 items-start transition duration-200">
         
         {/* Input Control Center */}
         <motion.div 
            initial={{ opacity: 0, scale: 0.95 }}
            animate={{ opacity: 1, scale: 1 }}
-           transition={{ delay: 0.2, duration: 0.5 }}
+            transition={{ delay: 0.04, duration: 0.2 }}
            className="lg:col-span-8 relative"
         >
           <div className="absolute -inset-1 bg-gradient-to-r from-indigo-500/20 to-purple-500/20 rounded-[2.5rem] blur-2xl opacity-30 pointer-events-none"></div>
@@ -104,7 +105,7 @@ export default function HomePage() {
                     <button
                         key={type}
                         onClick={() => setInputType(type)}
-                        className={`px-6 py-2.5 text-[10px] font-black uppercase tracking-widest rounded-xl transition-all ${
+                    className={`px-6 py-2.5 text-[10px] font-black uppercase tracking-widest rounded-xl interactive-fast ${
                             inputType === type ? "bg-indigo-600 text-white shadow-lg" : "text-zinc-600 hover:text-zinc-300"
                         }`}
                     >
@@ -130,13 +131,13 @@ export default function HomePage() {
                     onChange={(e) => setInputValue(e.target.value)}
                     onKeyDown={(e) => e.key === "Enter" && handleStartAnalysis()}
                     placeholder="Capture target ID or URL..."
-                    className="w-full pl-16 pr-8 py-7 bg-black/40 border border-white/5 rounded-3xl text-lg font-bold text-white placeholder-zinc-800 focus:outline-none focus:border-indigo-500/40 focus:ring-1 focus:ring-indigo-500/40 transition-all shadow-inner"
+                    className="w-full pl-16 pr-8 py-7 bg-black/40 border border-white/5 rounded-3xl text-lg font-bold text-white placeholder-zinc-800 focus:outline-none focus:border-indigo-500/40 focus:ring-1 focus:ring-indigo-500/40 transition duration-150 shadow-inner"
                   />
                   <div className="absolute right-4 inset-y-4 flex">
                      <button
                         onClick={handleStartAnalysis}
                         disabled={isAnalyzing || !inputValue}
-                        className="px-8 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-black uppercase tracking-[0.2em] rounded-2xl transition-all shadow-xl shadow-indigo-600/20 disabled:opacity-50"
+                        className="px-8 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-black uppercase tracking-[0.2em] rounded-2xl interactive-fast shadow-md shadow-indigo-600/20 disabled:opacity-50"
                      >
                         {isAnalyzing ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : "Engage"}
                      </button>
@@ -154,7 +155,7 @@ export default function HomePage() {
                   />
                   <label 
                     htmlFor="csv-file"
-                    className="flex flex-col items-center justify-center p-16 border-2 border-dashed border-white/5 rounded-[3rem] bg-black/30 cursor-pointer hover:border-indigo-500/30 hover:bg-indigo-500/[0.02] transition-all group"
+                    className="flex flex-col items-center justify-center p-16 border-2 border-dashed border-white/5 rounded-[3rem] bg-black/30 cursor-pointer hover:border-indigo-500/30 hover:bg-indigo-500/[0.02] interactive-fast group"
                   >
                     <div className="w-16 h-16 rounded-3xl bg-indigo-500/10 flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
                         {selectedFile ? <Check className="w-8 h-8 text-emerald-400" /> : <CloudUpload className="w-8 h-8 text-indigo-400" />}
@@ -167,7 +168,7 @@ export default function HomePage() {
                   {selectedFile && (
                       <button 
                         onClick={handleStartAnalysis} 
-                        className="w-full mt-6 py-5 bg-indigo-600 rounded-[2rem] text-xs font-black uppercase tracking-widest text-white hover:bg-indigo-500 shadow-2xl"
+                        className="w-full mt-6 py-5 bg-indigo-600 rounded-[2rem] text-xs font-black uppercase tracking-widest text-white hover:bg-indigo-500 shadow-md interactive-fast"
                       >
                          Analyze Dataset
                       </button>
@@ -181,7 +182,7 @@ export default function HomePage() {
                     <p className="text-zinc-400 text-sm font-medium mb-8">Deploying isolated benchmark dataset (Global Social Trends v2.1)</p>
                     <button 
                          onClick={handleStartAnalysis}
-                         className="px-12 py-5 bg-indigo-600 text-white text-xs font-black uppercase tracking-widest rounded-[2rem] hover:bg-indigo-500 transition-all shadow-2xl shadow-indigo-500/40"
+                        className="px-12 py-5 bg-indigo-600 text-white text-xs font-black uppercase tracking-widest rounded-[2rem] hover:bg-indigo-500 interactive-fast shadow-md shadow-indigo-500/20"
                     >
                          Initialize Demo
                     </button>
@@ -200,7 +201,7 @@ export default function HomePage() {
             <motion.div 
                 initial={{ opacity: 0, x: 20 }}
                 animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: 0.4 }}
+              transition={{ delay: 0.06, duration: 0.2 }}
                 className="grid grid-cols-1 gap-4"
             >
                 {STATS.map((stat, i) => (
@@ -223,8 +224,8 @@ export default function HomePage() {
             <motion.div 
                 initial={{ opacity: 0, x: 20 }}
                 animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: 0.6 }}
-                className="glass-card p-8 rounded-[2.5rem] border border-white/5 shadow-2xl"
+              transition={{ delay: 0.09, duration: 0.2 }}
+              className="glass-card p-8 rounded-[2.5rem] border border-white/5 shadow-lg"
             >
                 <div className="flex items-center justify-between mb-8">
                     <h3 className="text-[10px] font-black text-zinc-500 uppercase tracking-widest">Global Scan Feed</h3>
@@ -254,6 +255,7 @@ export default function HomePage() {
 
       {/* Background Animated Assets */}
       <div className="fixed top-0 right-0 w-[800px] h-[800px] bg-indigo-500/5 rounded-full blur-[200px] opacity-30 select-none pointer-events-none z-[-1]" />
+      </div>
     </div>
   );
 }

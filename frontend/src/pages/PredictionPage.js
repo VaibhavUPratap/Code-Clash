@@ -52,19 +52,19 @@ export default function PredictionPage() {
     const { past, future } = useMemo(() => buildForecast(historical, metric), [historical, metric]);
     const chartData = [...past, ...future];
 
-    if (loading) return <div className="flex-1 min-h-screen bg-[#030303] flex items-center justify-center"><div className="w-10 h-10 border-2 border-indigo-600 rounded-full animate-spin" /></div>;
+    if (loading) return <div className="page-shell flex items-center justify-center"><div className="w-10 h-10 border-2 border-indigo-600 rounded-full animate-spin" /></div>;
 
     return (
-        <div className="flex-1 min-h-screen bg-[#030303] p-8 lg:p-20 overflow-y-auto">
-            <div className="max-w-6xl mx-auto">
-                <h1 className="text-5xl font-black text-white italic uppercase tracking-tighter mb-16 leading-none">Horizon Forecast</h1>
+        <div className="page-shell">
+            <div className="page-container">
+                <h1 className="text-5xl font-black text-white italic uppercase tracking-tighter mb-12 leading-none">Horizon Forecast</h1>
                 
-                <div className="glass-card rounded-[3rem] p-10 border-white/[0.05] relative overflow-hidden min-h-[600px] flex flex-col">
-                    <div className="flex items-center justify-between mb-12">
+                <div className="glass-card rounded-[3rem] p-6 md:p-8 lg:p-10 border-white/[0.05] relative overflow-hidden min-h-[420px] lg:min-h-[520px] flex flex-col">
+                    <div className="flex items-center justify-between mb-8 md:mb-10">
                         <h3 className="text-[10px] font-black uppercase tracking-[0.5em] text-zinc-600">Synthetic Horizon Matrix</h3>
                         <div className="flex gap-4">
                             {["likes", "comments", "shares"].map(m => (
-                                <button key={m} onClick={() => setMetric(m)} className={`px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest border ${metric === m ? "bg-indigo-600 border-indigo-500 text-white" : "border-white/10 text-zinc-600"}`}>
+                                <button key={m} onClick={() => setMetric(m)} className={`px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest border interactive-fast ${metric === m ? "bg-indigo-600 border-indigo-500 text-white" : "border-white/10 text-zinc-600 hover:text-zinc-400"}`}>
                                     {m}
                                 </button>
                             ))}
@@ -72,7 +72,7 @@ export default function PredictionPage() {
                     </div>
 
                     {/* Final fix: Aspect Ratio stabilization */}
-                    <div className="w-full flex-grow relative z-10 block min-h-[450px] aspect-[21/9]">
+                    <div className="w-full flex-grow relative z-10 block min-h-[320px] md:min-h-[380px] lg:min-h-[420px] xl:min-h-[500px] aspect-[21/9] chart-container-gpu">
                         <ResponsiveContainer width="100%" height="100%">
                             <ComposedChart data={chartData}>
                                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#ffffff10" />

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { memo, useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
   Info, 
@@ -89,14 +89,14 @@ export default function InsightsPage() {
   };
 
   return (
-    <div className="flex-1 min-h-screen bg-[#030303] overflow-y-auto px-6 py-12 md:px-12 md:py-20 lg:py-32">
-      <div className="max-w-5xl mx-auto flex flex-col">
+    <div className="page-shell">
+      <div className="page-container flex flex-col">
         
         {/* Header — Forensic Style */}
         <motion.div 
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
-            className="mb-20 border-b border-white/5 pb-12 text-center md:text-left relative"
+            className="mb-14 border-b border-white/5 pb-10 text-center md:text-left relative"
         >
             <div className="absolute top-0 right-0 p-12 opacity-[0.03] pointer-events-none">
                 <Brain className="w-80 h-80" />
@@ -113,7 +113,7 @@ export default function InsightsPage() {
         </motion.div>
 
         {/* Insights Grid */}
-        <div className="space-y-10 pb-40">
+        <div className="space-y-8 pb-28">
           {loading ? (
             <div className="flex flex-col items-center py-40">
                 <div className="w-12 h-12 border-b-2 border-indigo-600 rounded-full animate-spin mb-8" />
@@ -129,7 +129,7 @@ export default function InsightsPage() {
               <p className="text-zinc-600 text-[10px] font-black uppercase tracking-[0.4em]">No diagnostic trace available in current manifold</p>
             </motion.div>
           ) : (
-            <div className="grid grid-cols-1 gap-12">
+            <div className="grid grid-cols-1 gap-6 md:gap-8">
               {insights.map((insight, idx) => (
                 <InsightCard key={insight.id} insight={insight} index={idx} fmtDate={fmtDate} />
               ))}
@@ -142,15 +142,15 @@ export default function InsightsPage() {
   );
 }
 
-function InsightCard({ insight, index, fmtDate }) {
+const InsightCard = memo(function InsightCard({ insight, index, fmtDate }) {
   const isResearch = insight.kind === "research";
   
   return (
     <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: index * 0.1 }}
-        className={`glass-card rounded-[3rem] overflow-hidden border-white/[0.05] relative group transition-all duration-500 hover:border-indigo-500/20 shadow-2xl`}
+        transition={{ delay: Math.min(index * 0.015, 0.09), duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+        className={`glass-card rounded-[3rem] overflow-hidden border-white/[0.05] relative group interactive-fast hover:border-indigo-500/20`}
     >
         <div className="flex flex-col md:flex-row h-full">
             
@@ -221,7 +221,7 @@ function InsightCard({ insight, index, fmtDate }) {
                     <p className="text-xs text-zinc-500 font-medium italic">
                         Final Neural Classification: <span className="text-indigo-400 font-bold">{insight.classification || "ANOMALY"}</span>
                     </p>
-                    <button className="flex items-center gap-3 text-[10px] font-black text-white uppercase tracking-[0.2em] group/btn">
+                    <button className="flex items-center gap-3 text-[10px] font-black text-white uppercase tracking-[0.2em] group/btn interactive-fast">
                         Pivot To Investigation
                         <ChevronRight className="w-4 h-4 text-indigo-500 group-hover/btn:translate-x-1 transition-transform" />
                     </button>
@@ -231,4 +231,6 @@ function InsightCard({ insight, index, fmtDate }) {
         </div>
     </motion.div>
   );
-}
+}, (prevProps, nextProps) => {
+  return prevProps.insight.id === nextProps.insight.id && prevProps.index === nextProps.index;
+});

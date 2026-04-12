@@ -145,13 +145,13 @@ export default function DeepResearchPage() {
   const isSynthesized = !report?.metadata?.fetched || report?.research_mode === 'gemini';
 
   return (
-    <div className="flex-1 min-h-full bg-[#030303] text-zinc-100 font-sans selection:bg-indigo-500/30">
-      <div className="max-w-7xl mx-auto px-8 md:px-16 py-12 lg:py-24">
+    <div className="page-shell text-zinc-100 font-sans selection:bg-indigo-500/30">
+      <div className="page-container-wide">
         
         <motion.header 
           initial={{ opacity: 0, y: 30 }}
           animate={{ opacity: 1, y: 0 }}
-          className="mb-20 flex flex-col md:flex-row md:items-baseline justify-between gap-10 border-b border-white/5 pb-10"
+          className="mb-14 flex flex-col md:flex-row md:items-center justify-between gap-8 border-b border-white/5 pb-10"
         >
           <div>
             <div className="flex items-center gap-6 mb-4">
@@ -181,12 +181,12 @@ export default function DeepResearchPage() {
           )}
         </motion.header>
 
-        <div className="relative mb-24 max-w-4xl mx-auto">
+        <div className="relative mb-16 max-w-4xl mx-auto">
           <div className="absolute -inset-1 bg-gradient-to-r from-indigo-500/10 to-purple-500/10 rounded-[3rem] blur-3xl opacity-20 pointer-events-none"></div>
           <motion.div 
             initial={{ opacity: 0, scale: 0.98 }}
             animate={{ opacity: 1, scale: 1 }}
-            className="p-2.5 bg-white/[0.02] backdrop-blur-3xl border border-white/[0.08] rounded-[2.5rem] shadow-2xl flex flex-col lg:flex-row gap-2.5"
+            className="p-2.5 bg-white/[0.02] border border-white/[0.08] rounded-[2.5rem] shadow-lg flex flex-col lg:flex-row gap-2.5"
           >
             <div className="relative flex-1">
               <div className="absolute inset-y-0 left-8 flex items-center pointer-events-none">
@@ -204,7 +204,7 @@ export default function DeepResearchPage() {
             <button
               onClick={() => handleAnalyze()}
               disabled={loading}
-              className="px-14 py-6 bg-indigo-600 hover:bg-indigo-500 disabled:bg-zinc-900 disabled:text-zinc-700 text-white font-black rounded-[2rem] transition-all flex items-center justify-center gap-4 shadow-xl shadow-indigo-600/20 uppercase tracking-[0.2em] text-[11px] group"
+              className="px-14 py-6 bg-indigo-600 hover:bg-indigo-500 disabled:bg-zinc-900 disabled:text-zinc-700 text-white font-black rounded-[2rem] interactive-fast flex items-center justify-center gap-4 shadow-md shadow-indigo-600/20 uppercase tracking-[0.2em] text-[11px] group"
             >
               {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Zap className="w-5 h-5 group-hover:scale-110 transition-transform" />}
               {loading ? "Forensics active" : "Map Root Cause"}
@@ -256,7 +256,8 @@ export default function DeepResearchPage() {
                 key="results"
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
-                className={`space-y-10 transition-all duration-700 ${loading ? "opacity-20 blur-xl scale-[0.99]" : "opacity-100"}`}
+              transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+              className={`space-y-8 transition duration-200 ${loading ? "opacity-20 blur-sm scale-[0.995]" : "opacity-100"}`}
             >
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
                 <div className="lg:col-span-2 p-12 md:p-14 glass-card rounded-[3rem] border-white/[0.05] relative overflow-hidden group">
@@ -289,7 +290,7 @@ export default function DeepResearchPage() {
                             {assessment.causal_hypothesis || "Determining Root Cause..."}
                         </h2>
                         
-                        <div className="p-10 bg-white/[0.02] border border-white/5 rounded-[3rem] backdrop-blur-xl group-hover:bg-white/[0.03] transition-all">
+                        <div className="p-10 bg-white/[0.02] border border-white/5 rounded-[3rem] group-hover:bg-white/[0.03] interactive-fast">
                             <p className="text-zinc-400 text-lg md:text-xl leading-relaxed italic font-medium">
                                 "{assessment.summary || report?.metadata?.description || "Processing autonomous synthesis..."}"
                             </p>
