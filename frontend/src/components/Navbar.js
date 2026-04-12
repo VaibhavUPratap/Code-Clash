@@ -50,12 +50,12 @@ export default function Navbar() {
 
           {/* Right Side */}
           <div className="hidden md:flex items-center gap-3">
-            <button className="px-4 py-2 text-sm font-medium text-gray-700 hover:text-gray-900 transition-colors">
+            <NavLink to="/login" className="px-4 py-2 text-sm font-medium text-gray-700 hover:text-gray-900 transition-colors no-underline">
               Login
-            </button>
-            <button className="px-4 py-2 text-sm font-semibold text-white bg-gradient-to-r from-indigo-500 to-purple-600 rounded-lg hover:shadow-lg hover:shadow-indigo-200 transition-all duration-200 hover:-translate-y-0.5">
+            </NavLink>
+            <NavLink to="/login" className="px-4 py-2 text-sm font-semibold text-white bg-gradient-to-r from-indigo-500 to-purple-600 rounded-lg hover:shadow-lg hover:shadow-indigo-200 transition-all duration-200 hover:-translate-y-0.5 no-underline">
               Get Started
-            </button>
+            </NavLink>
           </div>
 
           {/* Mobile Menu Button */}
@@ -100,12 +100,12 @@ export default function Navbar() {
             </NavLink>
           ))}
           <div className="pt-3 flex flex-col gap-2 border-t border-gray-100 mt-2">
-            <button className="px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 rounded-lg transition-colors">
+            <NavLink to="/login" className="px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 rounded-lg transition-colors no-underline text-center">
               Login
-            </button>
-            <button className="px-4 py-2 text-sm font-semibold text-white bg-gradient-to-r from-indigo-500 to-purple-600 rounded-lg">
+            </NavLink>
+            <NavLink to="/login" className="px-4 py-2 text-sm font-semibold text-white bg-gradient-to-r from-indigo-500 to-purple-600 rounded-lg no-underline text-center">
               Get Started
-            </button>
+            </NavLink>
           </div>
         </div>
       </div>
