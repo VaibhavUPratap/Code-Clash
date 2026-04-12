@@ -102,15 +102,16 @@ def analyze():
     try:
         link_research = None
 
-        # Load data
-        source = request.form.get("source", "sample")
-        handle_input = request.form.get("handle", "").strip()
+        # Load data (Support both JSON and Form)
+        payload = request.get_json(silent=True) or {}
+        source = request.form.get("source") or payload.get("source") or payload.get("type", "sample")
+        handle_input = request.form.get("handle") or payload.get("handle") or payload.get("value", "").strip()
 
         if "file" in request.files:
             file = request.files["file"]
             df = load_from_csv(file_obj=file)
             source = "upload"
-        elif source == "twitter":
+        elif source in ["twitter", "username", "url"]:
             handle = handle_input or "elonmusk"
             if _is_url_like(handle):
                 url = handle if "://" in handle else f"https://{handle}"

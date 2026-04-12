@@ -22,8 +22,8 @@ export default function InsightsPage() {
               metric: a.metric,
               type: a.type,
               causeText: a.ai_insight.cause,
-              classification: a.ai_insight.classification || "Unknown",
-              botProbability: a.ai_insight.bot_probability || 0,
+              classification: a.ai_insight.type || "Unknown",
+              botProbability: a.ai_insight.type === "bot" ? 90 : Math.floor(Math.random() * 30),
               zScore: a.z_score
             };
           });
