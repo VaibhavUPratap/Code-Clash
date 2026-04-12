@@ -102,49 +102,56 @@ def analyze():
     try:
         link_research = None
 
-        # Load data (Support both JSON and Form)
-        payload = request.get_json(silent=True) or {}
-        source = request.form.get("source") or payload.get("source") or payload.get("type", "sample")
-        handle_input = request.form.get("handle") or payload.get("handle") or payload.get("value", "").strip()
+        # ── Parse request ────────────────────────────────────────────────────
+        # Supports both JSON body (from the React frontend) and multipart form.
+        json_body = request.get_json(silent=True) or {}
+        source = (
+            request.form.get("source")
+            or json_body.get("source", "sample")
+        ).strip().lower()
+        handle = (
+            request.form.get("handle")
+            or json_body.get("handle", "")
+        ).strip()
 
+        # ── Routing ──────────────────────────────────────────────────────────
         if "file" in request.files:
+            # CSV file upload (multipart/form-data)
             file = request.files["file"]
             df = load_from_csv(file_obj=file)
             source = "upload"
-        elif source in ["twitter", "username", "url"]:
-            handle = handle_input or "elonmusk"
-            if _is_url_like(handle):
-                url = handle if "://" in handle else f"https://{handle}"
 
-                # Deep research for any URL (not only X/Twitter links).
-                try:
-                    link_research = research_post_url(url)
-                except ValueError as exc:
-                    return jsonify({"status": "error", "message": str(exc)}), 400
-                except Exception:
-                    logger.exception("Link research failed inside analyze")
+        elif source == "url":
+            # Full URL supplied — may be a tweet URL or any web link
+            url = handle if "://" in handle else f"https://{handle}"
+            try:
+                link_research = research_post_url(url)
+            except ValueError as exc:
+                return jsonify({"status": "error", "message": str(exc)}), 400
+            except Exception:
+                logger.exception("Link research failed inside analyze")
 
-                if "twitter.com/" in url or "x.com/" in url:
-                    df = load_from_tweet_url(url=url)
-                    source = "twitter_url"
-                else:
-                    # Keep the anomaly pipeline operational for non-X URLs.
-                    df = load_from_csv()
-                    source = "link"
+            if "twitter.com/" in url or "x.com/" in url:
+                df = load_from_tweet_url(url=url)
+                source = "twitter_url"
             else:
-                df = load_from_twitter(handle=handle)
+                df = load_from_csv()
+                source = "link"
+
+        elif source == "twitter":
+            # Twitter handle (e.g. "elonmusk" or "@elonmusk")
+            twitter_handle = handle.lstrip("@") or "elonmusk"
+            df = load_from_twitter(handle=twitter_handle)
+
         else:
+            # "sample" or any unrecognised value → bundled sample data
             df = load_from_csv()
+            source = "sample"
 
+        # ── Pipeline ─────────────────────────────────────────────────────────
         records = dataframe_to_records(df)
-
-        # Detect anomalies
         anomalies = detect_all_metrics(df)
-
-        # AI explanations
         insights = explain_batch(anomalies, records)
-
-        # Build summary stats
         summary = _build_summary(records, anomalies)
 
         result = {

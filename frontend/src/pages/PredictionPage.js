@@ -134,15 +134,23 @@ export default function PredictionPage() {
     const [dataSource, setDataSource] = useState("none");
 
     useEffect(() => {
+        const processResult = (result) => {
+            if (result.status === "ok" && result.data?.length) {
+                setHistorical(result.data);
+                setDataSource(result.source || "sample");
+            }
+            setLoading(false);
+        };
+
+        // Try sessionStorage first
+        const cached = sessionStorage.getItem("analysisData");
+        if (cached) {
+            try { processResult(JSON.parse(cached)); return; } catch (e) { /* fall through */ }
+        }
+
         fetch("http://localhost:5000/api/get-results")
             .then(res => res.json())
-            .then(result => {
-                if (result.status === "ok" && result.data?.length) {
-                    setHistorical(result.data);
-                    setDataSource(result.source || "sample");
-                }
-                setLoading(false);
-            })
+            .then(processResult)
             .catch(() => setLoading(false));
     }, []);
 

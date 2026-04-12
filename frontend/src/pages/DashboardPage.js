@@ -88,42 +88,49 @@ export default function DashboardPage() {
   const [rawData, setRawData] = useState([]);
 
   useEffect(() => {
+    const processResult = (result) => {
+      if (result.status !== "ok" || !result.data) return;
+
+      const data_points = result.data;
+      const anomalies = (result.anomalies || []).filter(a => a.metric === metric);
+
+      const anomalyMap = {};
+      anomalies.forEach((a) => { anomalyMap[a.date] = a; });
+
+      const points = data_points.map((dp) => {
+        const dateObj = new Date(dp.date);
+        const isAnomaly = !!anomalyMap[dp.date];
+        const aInfo = anomalyMap[dp.date];
+        const severity = aInfo ? (Math.abs(aInfo.z_score) > 4.5 ? "critical" : Math.abs(aInfo.z_score) > 3 ? "medium" : "low") : null;
+
+        return {
+          ...dp,
+          label: `${dateObj.toLocaleString("default", { month: "short", day: "numeric" })}`,
+          value: dp[metric],
+          upper: dp[metric] + (dp[metric] * 0.15 + 50),
+          lower: Math.max(0, dp[metric] - (dp[metric] * 0.15 + 50)),
+          isAnomaly,
+          severity,
+          z_score: aInfo ? (Math.round(aInfo.z_score * 100) / 100) : 0,
+        };
+      });
+      setRawData(points);
+    };
+
+    // Try sessionStorage first, then fall back to the API cache endpoint
+    const cached = sessionStorage.getItem("analysisData");
+    if (cached) {
+      try {
+        processResult(JSON.parse(cached));
+        return;
+      } catch (e) {
+        console.warn("Failed to parse sessionStorage data:", e);
+      }
+    }
+
     fetch("http://localhost:5000/api/get-results")
       .then((res) => res.json())
-      .then((result) => {
-        if (result.status !== "ok" || !result.data) return;
-
-        const data_points = result.data;
-        const anomalies = (result.anomalies || []).filter(a => a.metric === metric);
-
-        const anomalyMap = {};
-        anomalies.forEach((a) => {
-          anomalyMap[a.date] = a;
-        });
-
-        const points = data_points.map((dp) => {
-          const dateObj = new Date(dp.date);
-          const isAnomaly = !!anomalyMap[dp.date];
-          const aInfo = anomalyMap[dp.date];
-
-          let severity = null;
-          if (aInfo) {
-            severity = Math.abs(aInfo.z_score) > 3 ? "critical" : "medium";
-          }
-
-          return {
-            ...dp,
-            label: `${dateObj.toLocaleString("default", { month: "short", day: "numeric" })}`,
-            value: dp[metric],
-            upper: dp[metric] + (dp[metric] * 0.15 + 50), // simplistic bounds
-            lower: Math.max(0, dp[metric] - (dp[metric] * 0.15 + 50)),
-            isAnomaly,
-            severity,
-            z_score: aInfo ? (Math.round(aInfo.z_score * 100) / 100) : 0,
-          };
-        });
-        setRawData(points);
-      })
+      .then(processResult)
       .catch((err) => console.error("Error fetching data:", err));
   }, [metric]);
 

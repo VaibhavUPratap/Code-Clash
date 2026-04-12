@@ -108,39 +108,43 @@ export default function AlertsPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    const processResult = (result) => {
+      if (result.status !== "ok" || !result.anomalies) {
+        setLoading(false);
+        return;
+      }
+
+      const allAlerts = result.anomalies.map((a, i) => {
+        const severity = a.severity || (Math.abs(a.z_score) >= 4.5 ? "critical" : Math.abs(a.z_score) >= 3.0 ? "medium" : "low");
+        return {
+          id: `alrt_${a.metric}_${i}_${a.date.replace(/-/g, "")}`,
+          timestamp: a.date,
+          metric: a.metric,
+          type: a.type,
+          severity,
+          zScore: a.z_score,
+          value: a.value,
+          expected: a.baseline_mean,
+          cause: a.ai_insight ? a.ai_insight.cause : `Automated statistical ${a.type} detection via Z-score manifold analysis.`,
+          duration: "1 Cycle",
+        };
+      });
+
+      allAlerts.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+      setAlerts(allAlerts);
+      setLoading(false);
+    };
+
+    // Try sessionStorage first
+    const cached = sessionStorage.getItem("analysisData");
+    if (cached) {
+      try { processResult(JSON.parse(cached)); return; } catch (e) { /* fall through */ }
+    }
+
     fetch("http://localhost:5000/api/get-results")
       .then((res) => res.json())
-      .then((result) => {
-        if (result.status !== "ok" || !result.anomalies) {
-          setLoading(false);
-          return;
-        }
-
-        const allAlerts = result.anomalies.map((a, i) => {
-          const severity = a.severity || (Math.abs(a.z_score) >= 4.5 ? "critical" : Math.abs(a.z_score) >= 3.0 ? "medium" : "low");
-
-          return {
-            id: `alrt_${a.metric}_${i}_${a.date.replace(/-/g, "")}`,
-            timestamp: a.date,
-            metric: a.metric,
-            type: a.type,
-            severity: severity,
-            zScore: a.z_score,
-            value: a.value,
-            expected: a.baseline_mean,
-            cause: a.ai_insight ? a.ai_insight.cause : `Automated statistical ${a.type} detection via Z-score manifold analysis.`,
-            duration: "1 Cycle",
-          };
-        });
-
-        allAlerts.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-        setAlerts(allAlerts);
-        setLoading(false);
-      })
-      .catch((e) => {
-        console.error("Error fetching alerts:", e);
-        setLoading(false);
-      });
+      .then(processResult)
+      .catch((e) => { console.error("Error fetching alerts:", e); setLoading(false); });
   }, []);
 
   const filteredAlerts = useMemo(() => {

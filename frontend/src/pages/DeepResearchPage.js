@@ -9,6 +9,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { researchLink, getResults } from "../services/api";
 
 function buildTimeline(report) {
   const rows = new Map();
@@ -108,8 +109,19 @@ export default function DeepResearchPage() {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    fetch("http://localhost:5000/api/get-results")
-      .then((res) => res.json())
+    // Check sessionStorage for link_research from a previous analyze call
+    const cached = sessionStorage.getItem("analysisData");
+    if (cached) {
+      try {
+        const data = JSON.parse(cached);
+        if (data.status === "ok" && data.link_research) {
+          setReport(data.link_research);
+          setUrl(data.link_research.url || "");
+          return;
+        }
+      } catch (e) { /* fall through */ }
+    }
+    getResults()
       .then((data) => {
         if (data.status === "ok" && data.link_research) {
           setReport(data.link_research);
@@ -128,6 +140,10 @@ export default function DeepResearchPage() {
   const breakdown = virality.breakdown || {};
   const platformSignal = report?.signals?.platform || {};
   const newsSignal = report?.signals?.news || {};
+  const platformStatus = platformSignal.status || (platformSignal.available ? "ok" : "error");
+  const platformReason = (platformSignal.reason || "").replace(/[.\s]+$/, "");
+  const platformInDegradedMode = !platformSignal.available && (platformStatus === "degraded" || platformStatus === "info");
+  const showPlatformNotice = !platformSignal.available && !!platformReason;
 
   const handleResearch = async () => {
     const raw = (url || "").trim();
@@ -141,22 +157,15 @@ export default function DeepResearchPage() {
     setLoading(true);
     setError("");
     try {
-      const response = await fetch("http://localhost:5000/api/research-link", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url: normalized }),
-      });
-
-      const payload = await response.json();
-      if (!response.ok || payload.status !== "ok") {
+      const payload = await researchLink(normalized);
+      if (payload.status !== "ok") {
         setError(payload.message || "Deep research request failed.");
         return;
       }
-
       setReport(payload.research);
       setUrl(payload.research?.url || normalized);
     } catch (e) {
-      setError("ERR_CONNECTION_REFUSED");
+      setError(e.message || "ERR_CONNECTION_REFUSED");
     } finally {
       setLoading(false);
     }
@@ -212,12 +221,21 @@ export default function DeepResearchPage() {
         ) : (
           <div className="space-y-6 relative z-10">
             {/* API Warning */}
-            {!platformSignal.available && platformSignal.reason && (
-              <div className="bg-red-500/10 border border-red-500/20 text-red-400 p-4 text-[10px] uppercase font-mono flex items-center gap-3 rounded-xl shadow-[inset_0_0_15px_rgba(239,68,68,0.1)] glow-red">
-                <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
+            {showPlatformNotice && (
+              <div
+                className={`${platformInDegradedMode
+                  ? "bg-amber-500/10 border border-amber-500/25 text-amber-200 shadow-[inset_0_0_15px_rgba(245,158,11,0.1)]"
+                  : "bg-red-500/10 border border-red-500/20 text-red-400 shadow-[inset_0_0_15px_rgba(239,68,68,0.1)] glow-red"
+                  } p-4 text-[10px] uppercase font-mono flex items-center gap-3 rounded-xl`}
+              >
+                <span className={`w-2 h-2 rounded-full animate-pulse ${platformInDegradedMode ? "bg-amber-400" : "bg-red-500"}`} />
                 <div>
-                  <span className="font-bold text-red-500 mr-2">WARN:</span>
-                  Platform metrics absent. {platformSignal.reason}. Analysis mode forced to external signals.
+                  <span className={`font-bold mr-2 ${platformInDegradedMode ? "text-amber-400" : "text-red-500"}`}>
+                    {platformInDegradedMode ? "DEGRADED:" : "WARN:"}
+                  </span>
+                  {platformInDegradedMode
+                    ? `Live platform metrics unavailable. ${platformReason}. Running external-signal analysis.`
+                    : `Platform metrics unavailable. ${platformReason}. Analysis mode forced to external signals.`}
                 </div>
               </div>
             )}

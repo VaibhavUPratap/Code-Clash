@@ -202,6 +202,8 @@ def _collect_platform_signals(url: str, platform: str) -> dict:
         return {
             "available": False,
             "platform": platform,
+            "status": "info",
+            "code": "unsupported_platform",
             "reason": "Direct platform metrics are currently implemented for X/Twitter URLs.",
         }
 
@@ -210,14 +212,28 @@ def _collect_platform_signals(url: str, platform: str) -> dict:
         return {
             "available": False,
             "platform": "x",
+            "status": "error",
+            "code": "invalid_tweet_url",
             "reason": "Could not parse tweet ID from the URL.",
         }
 
-    if not TWEEPY_AVAILABLE or not Config.TWITTER_BEARER_TOKEN:
+    if not TWEEPY_AVAILABLE:
         return {
             "available": False,
             "platform": "x",
             "tweet_id": tweet_id,
+            "status": "degraded",
+            "code": "x_client_unavailable",
+            "reason": "Twitter metrics client unavailable. Install tweepy to enable live metrics.",
+        }
+
+    if not Config.TWITTER_BEARER_TOKEN:
+        return {
+            "available": False,
+            "platform": "x",
+            "tweet_id": tweet_id,
+            "status": "degraded",
+            "code": "x_credentials_missing",
             "reason": "Twitter credentials unavailable. Add TWITTER_BEARER_TOKEN for live metrics.",
         }
 
@@ -232,6 +248,8 @@ def _collect_platform_signals(url: str, platform: str) -> dict:
                 "available": False,
                 "platform": "x",
                 "tweet_id": tweet_id,
+                "status": "error",
+                "code": "x_tweet_inaccessible",
                 "reason": "Tweet not found or inaccessible from API.",
             }
 
@@ -243,6 +261,7 @@ def _collect_platform_signals(url: str, platform: str) -> dict:
             "available": True,
             "platform": "x",
             "tweet_id": tweet_id,
+            "status": "ok",
             "created_at": getattr(tweet, "created_at", None).isoformat()
             if getattr(tweet, "created_at", None)
             else None,
@@ -266,16 +285,26 @@ def _collect_platform_signals(url: str, platform: str) -> dict:
                 "Twitter API account has no credits / insufficient access tier. "
                 "Upgrade to Basic or Pro at developer.x.com to enable live metrics."
             )
+            status = "degraded"
+            code = "x_api_tier_limit"
         elif "401" in err_str or "Unauthorized" in err_str:
             reason = "Twitter Bearer Token is invalid or expired. Update TWITTER_BEARER_TOKEN in .env."
+            status = "error"
+            code = "x_api_auth_error"
         elif "403" in err_str or "Forbidden" in err_str:
             reason = "Twitter API access is forbidden for this endpoint. The Bearer Token may lack required permissions."
+            status = "error"
+            code = "x_api_forbidden"
         else:
             reason = f"Twitter API request failed: {err_str[:120]}"
+            status = "error"
+            code = "x_api_request_failed"
         return {
             "available": False,
             "platform": "x",
             "tweet_id": tweet_id,
+            "status": status,
+            "code": code,
             "reason": reason,
         }
 
@@ -465,7 +494,8 @@ def _parse_pub_date(value: str) -> datetime | None:
 
 
 def _compute_virality(platform_signals: dict, news_signals: dict) -> dict:
-    metrics = platform_signals.get("metrics", {}) if platform_signals.get("available") else {}
+    platform_available = bool(platform_signals.get("available"))
+    metrics = platform_signals.get("metrics", {}) if platform_available else {}
 
     likes = float(metrics.get("likes", 0))
     comments = float(metrics.get("comments", 0))
@@ -479,14 +509,21 @@ def _compute_virality(platform_signals: dict, news_signals: dict) -> dict:
         + _cap(math.log10(quotes + 1) * 6.0, 10.0)
     )
 
-    conversation_posts = platform_signals.get("conversation_posts_7d") or 0
-    conversation_component = _cap(float(conversation_posts) * 0.6, 12.0)
+    conversation_posts = platform_signals.get("conversation_posts_7d") if platform_available else 0
+    conversation_component = _cap(float(conversation_posts or 0) * 0.6, 12.0)
 
     mentions_24h = float(news_signals.get("mentions_24h", 0))
     mentions_7d = float(news_signals.get("mentions_7d", 0))
     news_component = _cap(mentions_24h * 2.8 + mentions_7d * 1.8, 28.0)
 
-    score = round(min(100.0, engagement_component + conversation_component + news_component), 1)
+    if platform_available:
+        score = round(min(100.0, engagement_component + conversation_component + news_component), 1)
+        news_breakdown = news_component
+    else:
+        # External-only mode when live platform metrics are unavailable.
+        external_component = _cap(mentions_24h * 7.0 + mentions_7d * 3.0, 100.0)
+        score = round(external_component, 1)
+        news_breakdown = external_component
 
     if score >= 70:
         label = "viral"
@@ -504,7 +541,7 @@ def _compute_virality(platform_signals: dict, news_signals: dict) -> dict:
         "breakdown": {
             "engagement": round(engagement_component, 1),
             "conversation": round(conversation_component, 1),
-            "news": round(news_component, 1),
+            "news": round(news_breakdown, 1),
         },
     }
 
@@ -518,6 +555,8 @@ def _derive_confidence(platform_signals: dict, news_signals: dict) -> str:
     if platform_signals.get("available"):
         evidence_points += 1
     if news_signals.get("available") and news_signals.get("mentions_7d", 0) > 0:
+        evidence_points += 1
+    if news_signals.get("available") and news_signals.get("mentions_24h", 0) >= 3:
         evidence_points += 1
     if platform_signals.get("conversation_posts_7d") not in (None, 0):
         evidence_points += 1
@@ -534,7 +573,11 @@ def _build_heuristic_assessment(virality: dict, platform_signals: dict, news_sig
     label = virality["label"]
 
     reasons = []
-    metrics = platform_signals.get("metrics", {})
+    platform_available = bool(platform_signals.get("available"))
+    metrics = platform_signals.get("metrics", {}) if platform_available else {}
+
+    if not platform_available:
+        reasons.append("Live platform metrics were unavailable, so external mention signals were weighted more heavily.")
 
     if metrics.get("likes", 0) >= 100000:
         reasons.append("High like count indicates broad social reach.")
@@ -563,6 +606,9 @@ def _build_heuristic_assessment(virality: dict, platform_signals: dict, news_sig
             "Continue monitoring for 24 hours before final judgement.",
             "Watch for external pickup in news and repost activity.",
         ]
+
+    if platform_signals.get("platform") == "x" and not platform_available:
+        actions.append("Enable X API Basic/Pro access and set TWITTER_BEARER_TOKEN to restore live platform metrics.")
 
     return {
         "verdict": label,

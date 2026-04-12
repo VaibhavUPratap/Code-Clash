@@ -5,36 +5,39 @@ export default function InsightsPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    const processResult = (result) => {
+      if (result.status !== "ok" || !result.anomalies) {
+        setLoading(false);
+        return;
+      }
+      const validInsights = result.anomalies
+        .filter((a) => a.ai_insight)
+        .map((a, index) => ({
+          id: `ins_${index}`,
+          date: new Date(a.date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+          metric: a.metric,
+          type: a.type,
+          causeText: a.ai_insight.cause,
+          recommendation: a.ai_insight.recommendation || "",
+          classification: a.ai_insight.type || "Unknown",
+          confidence: a.ai_insight.confidence || "low",
+          botProbability: a.ai_insight.type === "bot" ? 90 : Math.floor(Math.random() * 30),
+          zScore: a.z_score,
+        }));
+      setInsights(validInsights);
+      setLoading(false);
+    };
+
+    // Try sessionStorage first
+    const cached = sessionStorage.getItem("analysisData");
+    if (cached) {
+      try { processResult(JSON.parse(cached)); return; } catch (e) { /* fall through */ }
+    }
+
     fetch("http://localhost:5000/api/get-results")
       .then((res) => res.json())
-      .then((result) => {
-        if (result.status !== "ok" || !result.anomalies) {
-          setLoading(false);
-          return;
-        }
-
-        const validInsights = result.anomalies
-          .filter((a) => a.ai_insight)
-          .map((a, index) => {
-            return {
-              id: `ins_${index}`,
-              date: new Date(a.date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
-              metric: a.metric,
-              type: a.type,
-              causeText: a.ai_insight.cause,
-              classification: a.ai_insight.type || "Unknown",
-              botProbability: a.ai_insight.type === "bot" ? 90 : Math.floor(Math.random() * 30),
-              zScore: a.z_score
-            };
-          });
-
-        setInsights(validInsights);
-        setLoading(false);
-      })
-      .catch((e) => {
-        console.error("Error fetching insights:", e);
-        setLoading(false);
-      });
+      .then(processResult)
+      .catch((e) => { console.error("Error fetching insights:", e); setLoading(false); });
   }, []);
 
   return (
@@ -90,14 +93,21 @@ export default function InsightsPage() {
               </div>
 
               {/* Right content block */}
-              <div className="flex-1 p-6 flex flex-col justify-center bg-zinc-900/20">
+              <div className="flex-1 p-6 flex flex-col justify-center bg-zinc-900/20 gap-4">
                 <p className="text-xs text-zinc-200 leading-relaxed font-mono bg-black/40 p-4 border border-white/5 rounded-lg shadow-inner">
                   <span className="text-indigo-500 font-bold mr-2">{'>_'}</span>
                   {insight.causeText}
                 </p>
 
+                {insight.recommendation && (
+                  <p className="text-xs text-zinc-400 leading-relaxed font-mono bg-emerald-500/5 border border-emerald-500/20 p-4 rounded-lg">
+                    <span className="text-emerald-400 font-bold mr-2">REC:</span>
+                    {insight.recommendation}
+                  </p>
+                )}
+
                 {insight.botProbability > 60 && (
-                  <div className="mt-4 flex items-center gap-3 bg-red-500/10 border border-red-500/20 text-red-400 text-[10px] uppercase font-bold tracking-widest px-4 py-2.5 rounded-lg w-fit shadow-[inset_0_0_8px_rgba(239,68,68,0.2)] glow-red">
+                  <div className="flex items-center gap-3 bg-red-500/10 border border-red-500/20 text-red-400 text-[10px] uppercase font-bold tracking-widest px-4 py-2.5 rounded-lg w-fit shadow-[inset_0_0_8px_rgba(239,68,68,0.2)] glow-red">
                     <span className="relative flex h-2.5 w-2.5">
                       <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
                       <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-red-500"></span>

@@ -1,58 +1,57 @@
 import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { analyzeData } from "../services/api";
 
 export default function HomePage() {
   const [inputType, setInputType] = useState("username");
   const [inputValue, setInputValue] = useState("");
   const [selectedFile, setSelectedFile] = useState(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [error, setError] = useState("");
   const navigate = useNavigate();
 
   const handleStartAnalysis = async () => {
+    setError("");
     setIsAnalyzing(true);
-    let payload = null;
-    let url = "http://localhost:5000/api/analyze";
-    let options = { method: "POST" };
 
     try {
-      if (inputType === "username" || inputType === "url") {
-        if (!inputValue) {
-          alert("Please enter a value.");
+      let data;
+
+      if (inputType === "csv") {
+        if (!selectedFile) {
+          setError("Please select a CSV file.");
           setIsAnalyzing(false);
           return;
         }
-        options.headers = { "Content-Type": "application/json" };
-        payload = JSON.stringify({
-          type: inputType,
-          value: inputValue,
-          sample_size: 50,
-        });
-        options.body = payload;
-      } else if (inputType === "csv" && selectedFile) {
-        const formData = new FormData();
-        formData.append("file", selectedFile);
-        options.body = formData;
+        data = await analyzeData({ file: selectedFile });
+      } else if (inputType === "username") {
+        if (!inputValue.trim()) {
+          setError("Please enter a Twitter handle.");
+          setIsAnalyzing(false);
+          return;
+        }
+        // Strip @ prefix if present
+        const handle = inputValue.trim().replace(/^@/, "");
+        data = await analyzeData({ source: "twitter", handle });
+      } else if (inputType === "url") {
+        if (!inputValue.trim()) {
+          setError("Please enter a URL.");
+          setIsAnalyzing(false);
+          return;
+        }
+        const handle = inputValue.trim();
+        data = await analyzeData({ source: "url", handle });
       } else {
-        alert("Please provide the required input.");
-        setIsAnalyzing(false);
-        return;
+        // "sample" or default
+        data = await analyzeData({ source: "sample" });
       }
 
-      console.log("Starting analysis with payload type:", inputType);
-
-      const response = await fetch(url, options);
-      const data = await response.json();
-
-      if (response.ok) {
-        sessionStorage.setItem("analysisData", JSON.stringify(data));
-        navigate("/dashboard");
-      } else {
-        alert(data.error || "Analysis failed.");
-        setIsAnalyzing(false);
-      }
-    } catch (error) {
-      console.error("Error connecting to backend:", error);
-      alert("Failed to connect to the backend server. Is it running?");
+      // Cache result for dashboard & child pages
+      sessionStorage.setItem("analysisData", JSON.stringify(data));
+      navigate("/dashboard");
+    } catch (err) {
+      console.error("Analysis error:", err);
+      setError(err.message || "Failed to connect to the backend. Is the Flask server running?");
       setIsAnalyzing(false);
     }
   };
@@ -85,7 +84,7 @@ export default function HomePage() {
               <div>
                 <label className="block text-xs font-mono text-zinc-400 mb-2">SOURCE_TYPE</label>
                 <div className="flex border border-white/10 rounded-lg overflow-hidden w-fit bg-zinc-950/50 p-1 gap-1">
-                  {["username", "url", "csv"].map((type) => (
+                  {["username", "url", "csv", "sample"].map((type) => (
                     <button
                       key={type}
                       className={`px-5 py-2 text-xs font-medium rounded-md transition-all duration-200 ${inputType === type
@@ -94,7 +93,7 @@ export default function HomePage() {
                         }`}
                       onClick={() => setInputType(type)}
                     >
-                      {type === "username" ? "Account" : type === "url" ? "URL" : "File Upload"}
+                      {type === "username" ? "Account" : type === "url" ? "URL" : type === "csv" ? "File Upload" : "Sample"}
                     </button>
                   ))}
                 </div>
@@ -106,9 +105,10 @@ export default function HomePage() {
                   <input
                     type="text"
                     className="w-full bg-zinc-950/50 border border-white/10 rounded-lg px-4 py-3 text-sm text-zinc-100 placeholder-zinc-700 focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/50 transition-colors shadow-[inset_0_2px_4px_rgba(0,0,0,0.2)]"
-                    placeholder={inputType === "username" ? "@username or target ID" : "https://..."}
+                    placeholder={inputType === "username" ? "@username or handle" : "https://twitter.com/..."}
                     value={inputValue}
                     onChange={(e) => setInputValue(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && handleStartAnalysis()}
                   />
                 </div>
               )}
@@ -133,7 +133,7 @@ export default function HomePage() {
                       ) : (
                         <span className="flex flex-col items-center gap-3">
                           <svg className="w-6 h-6 text-zinc-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" /></svg>
-                          <span>Upload a CSV file containing <code className="bg-zinc-800/80 px-1.5 py-0.5 rounded text-xs text-zinc-300 border border-white/5 font-mono">timestamp</code> and <code className="bg-zinc-800/80 px-1.5 py-0.5 rounded text-xs text-zinc-300 border border-white/5 font-mono">value</code> cols.</span>
+                          <span>Upload a CSV file with <code className="bg-zinc-800/80 px-1.5 py-0.5 rounded text-xs text-zinc-300 border border-white/5 font-mono">date, likes, comments, shares, posts</code> columns.</span>
                         </span>
                       )}
                     </label>
@@ -141,10 +141,23 @@ export default function HomePage() {
                 </div>
               )}
 
+              {inputType === "sample" && (
+                <div className="bg-indigo-500/10 border border-indigo-500/20 rounded-lg px-5 py-4 text-xs font-mono text-indigo-300">
+                  <span className="font-bold text-indigo-400 mr-2">&gt;_</span>
+                  Using bundled sample dataset — no credentials required.
+                </div>
+              )}
+
+              {error && (
+                <div className="bg-red-500/10 border border-red-500/20 rounded-lg px-4 py-3 text-xs font-mono text-red-400">
+                  <span className="font-bold mr-2">ERROR:</span>{error}
+                </div>
+              )}
+
               <div className="pt-4 border-t border-white/5">
                 <button
                   onClick={handleStartAnalysis}
-                  disabled={isAnalyzing || (inputType === "csv" && !selectedFile) || (inputType !== "csv" && !inputValue)}
+                  disabled={isAnalyzing || (inputType === "csv" && !selectedFile) || ((inputType === "username" || inputType === "url") && !inputValue)}
                   className="w-full sm:w-auto px-8 py-3 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-[0_0_15px_rgba(79,70,229,0.3)] hover:shadow-[0_0_25px_rgba(79,70,229,0.5)] border border-indigo-500/50"
                 >
                   {isAnalyzing ? (
@@ -194,7 +207,7 @@ export default function HomePage() {
               <h3 className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest mb-1">Engine Status</h3>
               <span className="text-xs font-mono text-zinc-400">Main cluster</span>
             </div>
-            <span className="flex items-center gap-2 font-mono text-emerald-400 text-xs border border-emerald-500/20 bg-emerald-500/10 px-2 py-1 rounded-md glow-emerald">
+            <span className="flex items-center gap-2 font-mono text-emerald-400 text-xs border border-emerald-500/20 bg-emerald-500/10 px-2 py-1 rounded-md">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
               ONLINE
             </span>
