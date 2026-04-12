@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from "react";
+import { TrendingUp, TrendingDown, ChevronRight } from "lucide-react";
 
 /* ─── Helpers ────────────────────────────────────────────────── */
 
@@ -34,11 +35,11 @@ function AlertRow({ alert }) {
     <>
       <tr
         onClick={() => setExpanded(!expanded)}
-        className={`border-b border-white/5 cursor-pointer text-xs transition-all duration-200 ${expanded ? "bg-white/5" : "hover:bg-white/5"}`}
+        className={`border-b border-white/5 cursor-pointer text-xs transition-all duration-200 group ${expanded ? "bg-white/5" : "hover:bg-white/5"}`}
       >
         <td className="py-3 px-5 font-mono text-zinc-400 w-36 border-r border-white/5">
           <div className="flex items-center gap-3">
-            <span className={`transition-transform duration-200 text-zinc-600 ${expanded ? "rotate-90" : ""}`}>▶</span>
+            <ChevronRight className={`w-4 h-4 transition-transform duration-300 text-zinc-600 ${expanded ? "rotate-90 text-indigo-400" : "group-hover:text-zinc-300 group-hover:scale-110"}`} strokeWidth={2.5} />
             {formatDate(alert.timestamp)}
           </div>
         </td>
@@ -47,9 +48,9 @@ function AlertRow({ alert }) {
         </td>
         <td className="py-3 px-5 text-zinc-500 border-r border-white/5 font-mono text-[11px] uppercase">
           {alert.type === "spike" ? (
-            <span className="flex items-center gap-1"><svg className="w-3 h-3 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 10l7-7m0 0l7 7m-7-7v18" /></svg> Spike</span>
+            <span className="flex items-center gap-1"><TrendingUp className="w-3.5 h-3.5 text-red-500 group-hover:scale-125 group-hover:-translate-y-0.5 transition-all duration-300" strokeWidth={2.5} /> Spike</span>
           ) : (
-            <span className="flex items-center gap-1"><svg className="w-3 h-3 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" /></svg> Drop</span>
+            <span className="flex items-center gap-1"><TrendingDown className="w-3.5 h-3.5 text-indigo-500 group-hover:scale-125 group-hover:translate-y-0.5 transition-all duration-300" strokeWidth={2.5} /> Drop</span>
           )}
         </td>
         <td className="py-3 px-5 w-32 border-r border-white/5">

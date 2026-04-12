@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { Activity, Loader2 } from "lucide-react";
 
 export default function LoginPage() {
     const navigate = useNavigate();
@@ -51,20 +52,8 @@ export default function LoginPage() {
         <div className="min-h-screen bg-gray-50 flex flex-col justify-center py-12 sm:px-6 lg:px-8">
             <div className="sm:mx-auto sm:w-full sm:max-w-md">
                 <div className="flex justify-center cursor-pointer" onClick={() => navigate("/")}>
-                    <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-200">
-                        <svg
-                            className="w-5 h-5 text-white"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
-                            strokeWidth={2.5}
-                        >
-                            <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"
-                            />
-                        </svg>
+                    <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-200 group transition-all duration-300">
+                        <Activity className="w-6 h-6 text-white group-hover:scale-110 group-hover:rotate-12 transition-all duration-300" strokeWidth={2.5} />
                     </div>
                 </div>
                 <h2 className="mt-6 text-center text-2xl font-bold tracking-tight text-gray-900">
@@ -181,15 +170,12 @@ export default function LoginPage() {
                                 type="submit"
                                 disabled={isFormEmpty || loading}
                                 className={`flex w-full justify-center rounded-lg border border-transparent py-2.5 px-4 text-sm font-semibold text-white shadow-sm transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 ${isFormEmpty || loading
-                                        ? "bg-indigo-300 cursor-not-allowed"
-                                        : "bg-indigo-600 hover:bg-indigo-700"
+                                    ? "bg-indigo-300 cursor-not-allowed"
+                                    : "bg-indigo-600 hover:bg-indigo-700"
                                     }`}
                             >
                                 {loading ? (
-                                    <svg className="w-5 h-5 animate-spin text-white flex-shrink-0" fill="none" viewBox="0 0 24 24">
-                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4l3-3-3-3v4a8 8 0 100 16v-4l-3 3 3 3v-4a8 8 0 01-8-8z" />
-                                    </svg>
+                                    <Loader2 className="w-5 h-5 animate-spin text-white flex-shrink-0" strokeWidth={2.5} />
                                 ) : (
                                     "Login"
                                 )}

@@ -10,6 +10,7 @@ import {
   ResponsiveContainer,
   ReferenceDot,
 } from "recharts";
+import { TrendingUp, TrendingDown } from "lucide-react";
 
 /* ─── Config ─────────────────────────────────────────────────── */
 
@@ -344,9 +345,9 @@ export default function DashboardPage() {
                         <td className="py-3 px-5 font-mono text-zinc-200">{a.value?.toLocaleString()}</td>
                         <td className="py-3 px-5 font-mono text-zinc-400 flex items-center gap-2">
                           {a.z_score > 0 ? (
-                            <svg className="w-3 h-3 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 10l7-7m0 0l7 7m-7-7v18" /></svg>
+                            <TrendingUp className="w-3.5 h-3.5 text-emerald-400 group-hover:scale-125 group-hover:-translate-y-0.5 transition-all duration-300" strokeWidth={2.5} />
                           ) : (
-                            <svg className="w-3 h-3 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" /></svg>
+                            <TrendingDown className="w-3.5 h-3.5 text-red-500 group-hover:scale-125 group-hover:translate-y-0.5 transition-all duration-300" strokeWidth={2.5} />
                           )}
                           {Math.abs(a.z_score).toFixed(2)}
                         </td>

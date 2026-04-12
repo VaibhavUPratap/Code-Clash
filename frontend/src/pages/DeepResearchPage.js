@@ -10,6 +10,7 @@ import {
   YAxis,
 } from "recharts";
 import { researchLink, getResults } from "../services/api";
+import { Loader2 } from "lucide-react";
 
 function buildTimeline(report) {
   const rows = new Map();
@@ -211,11 +212,8 @@ export default function DeepResearchPage() {
         </div>
 
         {!report ? (
-          <div className="border border-white/5 border-dashed rounded-2xl p-16 text-center text-[10px] text-zinc-600 font-mono uppercase tracking-widest bg-zinc-950/30 flex flex-col items-center">
-            <svg className="animate-spin h-6 w-6 text-zinc-700 mb-4" viewBox="0 0 24 24">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-            </svg>
+          <div className="border border-white/5 border-dashed rounded-2xl p-16 text-center text-[10px] text-zinc-600 font-mono uppercase tracking-widest bg-zinc-950/30 flex flex-col items-center group">
+            <Loader2 className="animate-spin h-8 w-8 text-indigo-400 mb-4 group-hover:scale-110 transition-transform duration-300" strokeWidth={2} />
             Awaiting input coordinates...
           </div>
         ) : (

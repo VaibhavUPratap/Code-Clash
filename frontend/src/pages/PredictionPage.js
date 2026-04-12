@@ -10,6 +10,7 @@ import {
     ResponsiveContainer,
     ReferenceArea,
 } from "recharts";
+import { AlertTriangle, Check } from "lucide-react";
 
 /* ─── Forecast Engine ────────────────────────────────────────── */
 
@@ -201,8 +202,8 @@ export default function PredictionPage() {
                 {loading ? (
                     <div className="py-32 text-center text-xs font-mono text-indigo-400 animate-pulse glass-panel rounded-2xl border-white/5">Initializing forecast matrix...</div>
                 ) : historical.length === 0 ? (
-                    <div className="glass-panel p-8 rounded-2xl text-xs font-mono text-zinc-500 bg-zinc-950/50 text-center flex flex-col items-center">
-                        <svg className="w-8 h-8 mb-4 text-zinc-700" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
+                    <div className="glass-panel p-8 rounded-2xl text-xs font-mono text-zinc-500 bg-zinc-950/50 text-center flex flex-col items-center group cursor-default">
+                        <AlertTriangle className="w-8 h-8 mb-4 text-zinc-700 group-hover:scale-110 group-hover:text-amber-500 transition-all duration-300" strokeWidth={1.5} />
                         ERR_NO_DATA: Run an analysis from the Root panel to cast forecast vectors.
                     </div>
                 ) : (
@@ -222,8 +223,8 @@ export default function PredictionPage() {
                             </div>
                         ) : (
                             <div className="bg-zinc-950/50 px-5 py-3 border-b border-white/5 flex items-center justify-between relative z-10">
-                                <span className="text-xs text-zinc-500 font-mono flex items-center gap-2">
-                                    <svg className="w-4 h-4 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                                <span className="text-xs text-zinc-500 font-mono flex items-center gap-2 group cursor-default">
+                                    <Check className="w-4 h-4 text-emerald-500 group-hover:scale-125 transition-transform duration-300" strokeWidth={2.5} />
                                     System predicts stable state within expected variance bands.
                                 </span>
                                 <span className="text-[10px] text-zinc-600 font-mono uppercase font-bold tracking-widest">TRAIL: {growthLabel}</span>

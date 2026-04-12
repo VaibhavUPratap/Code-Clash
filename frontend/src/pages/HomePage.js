@@ -1,9 +1,10 @@
 import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { analyzeData } from "../services/api";
+import { Check, CloudUpload, Loader2 } from "lucide-react";
 
 export default function HomePage() {
-  const [inputType, setInputType] = useState("username");
+  const [inputType, setInputType] = useState("url");
   const [inputValue, setInputValue] = useState("");
   const [selectedFile, setSelectedFile] = useState(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -24,15 +25,6 @@ export default function HomePage() {
           return;
         }
         data = await analyzeData({ file: selectedFile });
-      } else if (inputType === "username") {
-        if (!inputValue.trim()) {
-          setError("Please enter a Twitter handle.");
-          setIsAnalyzing(false);
-          return;
-        }
-        // Strip @ prefix if present
-        const handle = inputValue.trim().replace(/^@/, "");
-        data = await analyzeData({ source: "twitter", handle });
       } else if (inputType === "url") {
         if (!inputValue.trim()) {
           setError("Please enter a URL.");
@@ -57,7 +49,7 @@ export default function HomePage() {
   };
 
   const recentScans = [
-    { target: "@tech_insider", type: "username", status: "Completed", time: "2m ago" },
+    { target: "https://reddit.com/r/tech", type: "url", status: "Completed", time: "2m ago" },
     { target: "trending_dataset.csv", type: "csv", status: "Failed", time: "1hr ago" },
     { target: "https://twitter.com/elonmusk...", type: "url", status: "Completed", time: "3hrs ago" },
   ];
@@ -84,7 +76,7 @@ export default function HomePage() {
               <div>
                 <label className="block text-xs font-mono text-zinc-400 mb-2">SOURCE_TYPE</label>
                 <div className="flex border border-white/10 rounded-lg overflow-hidden w-fit bg-zinc-950/50 p-1 gap-1">
-                  {["username", "url", "csv", "sample"].map((type) => (
+                  {["url", "csv", "sample"].map((type) => (
                     <button
                       key={type}
                       className={`px-5 py-2 text-xs font-medium rounded-md transition-all duration-200 ${inputType === type
@@ -93,19 +85,19 @@ export default function HomePage() {
                         }`}
                       onClick={() => setInputType(type)}
                     >
-                      {type === "username" ? "Account" : type === "url" ? "URL" : type === "csv" ? "File Upload" : "Sample"}
+                      {type === "url" ? "URL" : type === "csv" ? "File Upload" : "Sample"}
                     </button>
                   ))}
                 </div>
               </div>
 
-              {(inputType === "username" || inputType === "url") && (
+              {inputType === "url" && (
                 <div>
                   <label className="block text-xs font-mono text-zinc-400 mb-2">TARGET_IDENTITY</label>
                   <input
                     type="text"
                     className="w-full bg-zinc-950/50 border border-white/10 rounded-lg px-4 py-3 text-sm text-zinc-100 placeholder-zinc-700 focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/50 transition-colors shadow-[inset_0_2px_4px_rgba(0,0,0,0.2)]"
-                    placeholder={inputType === "username" ? "@username or handle" : "https://twitter.com/..."}
+                    placeholder="https://twitter.com/..."
                     value={inputValue}
                     onChange={(e) => setInputValue(e.target.value)}
                     onKeyDown={(e) => e.key === "Enter" && handleStartAnalysis()}
@@ -126,14 +118,14 @@ export default function HomePage() {
                     />
                     <label htmlFor="dataset-upload" className="cursor-pointer text-sm text-zinc-500 hover:text-zinc-300 transition-colors">
                       {selectedFile ? (
-                        <span className="font-medium text-indigo-400 flex items-center justify-center gap-2">
-                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                        <span className="font-medium text-indigo-400 flex items-center justify-center gap-2 group">
+                          <Check className="w-5 h-5 text-indigo-400 group-hover:scale-110 group-hover:text-indigo-300 transition-all duration-300" />
                           {selectedFile.name}
                         </span>
                       ) : (
-                        <span className="flex flex-col items-center gap-3">
-                          <svg className="w-6 h-6 text-zinc-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" /></svg>
-                          <span>Upload a CSV file with <code className="bg-zinc-800/80 px-1.5 py-0.5 rounded text-xs text-zinc-300 border border-white/5 font-mono">date, likes, comments, shares, posts</code> columns.</span>
+                        <span className="flex flex-col items-center gap-3 group">
+                          <CloudUpload className="w-8 h-8 text-zinc-500 group-hover:text-indigo-400 group-hover:-translate-y-1 transition-all duration-300" />
+                          <span className="group-hover:text-zinc-300 transition-colors">Upload a CSV file with <code className="bg-zinc-800/80 px-1.5 py-0.5 rounded text-xs text-zinc-300 border border-white/5 font-mono">date, likes, comments, shares, posts</code> columns.</span>
                         </span>
                       )}
                     </label>
@@ -157,15 +149,12 @@ export default function HomePage() {
               <div className="pt-4 border-t border-white/5">
                 <button
                   onClick={handleStartAnalysis}
-                  disabled={isAnalyzing || (inputType === "csv" && !selectedFile) || ((inputType === "username" || inputType === "url") && !inputValue)}
+                  disabled={isAnalyzing || (inputType === "csv" && !selectedFile) || (inputType === "url" && !inputValue)}
                   className="w-full sm:w-auto px-8 py-3 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-[0_0_15px_rgba(79,70,229,0.3)] hover:shadow-[0_0_25px_rgba(79,70,229,0.5)] border border-indigo-500/50"
                 >
                   {isAnalyzing ? (
                     <>
-                      <svg className="animate-spin h-4 w-4 text-white" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                      </svg>
+                      <Loader2 className="animate-spin h-5 w-5 text-white" />
                       ENGAGING...
                     </>
                   ) : (

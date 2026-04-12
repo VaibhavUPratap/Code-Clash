@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { Info, TrendingUp, TrendingDown } from "lucide-react";
 
 export default function InsightsPage() {
   const [insights, setInsights] = useState([]);
@@ -51,9 +52,9 @@ export default function InsightsPage() {
         {loading ? (
           <p className="text-xs font-mono text-indigo-400 animate-pulse text-center py-10">Initializing neural diagnostic logs...</p>
         ) : insights.length === 0 ? (
-          <div className="glass-panel p-10 rounded-2xl flex flex-col items-center border border-white/5 bg-zinc-900/30">
-            <svg className="w-8 h-8 text-zinc-600 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-            <p className="text-xs font-mono text-zinc-500 italic uppercase">No diagnostic logs available in current manifold.</p>
+          <div className="glass-panel p-10 rounded-2xl flex flex-col items-center border border-white/5 bg-zinc-900/30 group cursor-default">
+            <Info className="w-10 h-10 text-zinc-600 mb-4 group-hover:scale-110 group-hover:text-indigo-400 transition-all duration-300" strokeWidth={1.5} />
+            <p className="text-xs font-mono text-zinc-500 italic uppercase transition-colors group-hover:text-zinc-400">No diagnostic logs available in current manifold.</p>
           </div>
         ) : (
           insights.map((insight) => (
@@ -71,7 +72,7 @@ export default function InsightsPage() {
                     <span className="block text-[9px] font-bold text-zinc-500 uppercase tracking-widest">Target Vector</span>
                     <span className="text-xs text-zinc-300 font-mono flex items-center gap-1.5 mt-0.5">
                       {insight.metric}
-                      {insight.type === "spike" ? <span className="text-red-400">↑</span> : <span className="text-indigo-400">↓</span>}
+                      {insight.type === "spike" ? <TrendingUp className="w-3.5 h-3.5 text-red-500 group-hover:-translate-y-1 group-hover:scale-125 transition-all duration-300" /> : <TrendingDown className="w-3.5 h-3.5 text-indigo-500 group-hover:translate-y-1 group-hover:scale-125 transition-all duration-300" />}
                     </span>
                   </div>
                   <div>
