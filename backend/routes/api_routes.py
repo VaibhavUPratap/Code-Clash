@@ -3,21 +3,25 @@ API Routes
 
 Endpoints:
   GET  /api/health          → service health check
-  GET  /api/fetch-data      → return sample / Reddit data
+    GET  /api/fetch-data      → return sample / Twitter data
   POST /api/fetch-data      → upload CSV file
   POST /api/analyze         → run full pipeline on uploaded CSV
+    POST /api/research-link   → run deep link research for virality assessment
   GET  /api/get-results     → return cached results (from last /analyze call)
 """
 
 import logging
+import re
 from flask import Blueprint, jsonify, request
 from services.data_service import (
     load_from_csv,
-    load_from_reddit,
+    load_from_twitter,
+    load_from_tweet_url,
     dataframe_to_records,
 )
 from services.detection_service import detect_all_metrics
 from services.ai_agent_service import explain_batch
+from services.link_research_service import research_post_url
 
 api_bp = Blueprint("api", __name__)
 logger = logging.getLogger(__name__)
@@ -41,12 +45,15 @@ def health():
 
 @api_bp.route("/fetch-data", methods=["GET"])
 def fetch_data_sample():
-    """Return sample CSV data (or subreddit data when ?source=reddit&sub=<name>)."""
+    """Return sample CSV data (or Twitter data when ?source=twitter&handle=<name>)."""
     source = request.args.get("source", "sample")
     try:
-        if source == "reddit":
-            subreddit = request.args.get("sub", "worldnews")
-            df = load_from_reddit(subreddit=subreddit)
+        if source == "twitter":
+            handle = request.args.get("handle", "elonmusk")
+            if "twitter.com/" in handle or "x.com/" in handle:
+                df = load_from_tweet_url(url=handle)
+            else:
+                df = load_from_twitter(handle=handle)
         else:
             df = load_from_csv()
 
@@ -93,15 +100,38 @@ def analyze():
       4. Cache and return results
     """
     try:
+        link_research = None
+
         # Load data
         source = request.form.get("source", "sample")
+        handle_input = request.form.get("handle", "").strip()
+
         if "file" in request.files:
             file = request.files["file"]
             df = load_from_csv(file_obj=file)
             source = "upload"
-        elif source == "reddit":
-            subreddit = request.form.get("sub", "worldnews")
-            df = load_from_reddit(subreddit=subreddit)
+        elif source == "twitter":
+            handle = handle_input or "elonmusk"
+            if _is_url_like(handle):
+                url = handle if "://" in handle else f"https://{handle}"
+
+                # Deep research for any URL (not only X/Twitter links).
+                try:
+                    link_research = research_post_url(url)
+                except ValueError as exc:
+                    return jsonify({"status": "error", "message": str(exc)}), 400
+                except Exception:
+                    logger.exception("Link research failed inside analyze")
+
+                if "twitter.com/" in url or "x.com/" in url:
+                    df = load_from_tweet_url(url=url)
+                    source = "twitter_url"
+                else:
+                    # Keep the anomaly pipeline operational for non-X URLs.
+                    df = load_from_csv()
+                    source = "link"
+            else:
+                df = load_from_twitter(handle=handle)
         else:
             df = load_from_csv()
 
@@ -122,6 +152,7 @@ def analyze():
             "data": records,
             "anomalies": insights,
             "summary": summary,
+            "link_research": link_research,
         }
 
         _cache["last"] = result
@@ -130,6 +161,25 @@ def analyze():
     except Exception:
         logger.exception("Error in analyze")
         return jsonify({"status": "error", "message": "Analysis failed. Please check your data and try again."}), 500
+
+
+@api_bp.route("/research-link", methods=["POST"])
+def research_link():
+    """Run deep URL research and return a virality assessment payload."""
+    payload = request.get_json(silent=True) or {}
+    url = (payload.get("url") or request.form.get("url") or "").strip()
+
+    if not url:
+        return jsonify({"status": "error", "message": "Provide a post URL in 'url'."}), 400
+
+    try:
+        report = research_post_url(url)
+        return jsonify({"status": "ok", "research": report})
+    except ValueError as exc:
+        return jsonify({"status": "error", "message": str(exc)}), 400
+    except Exception:
+        logger.exception("Error in research_link")
+        return jsonify({"status": "error", "message": "Deep research failed for this URL."}), 500
 
 
 # ---------------------------------------------------------------------------
@@ -176,3 +226,13 @@ def _build_summary(records: list, anomalies: list) -> dict:
             "shares": round(avg_shares, 1),
         },
     }
+
+
+def _is_url_like(value: str) -> bool:
+    if not value:
+        return False
+    if "://" in value:
+        return True
+    if "x.com/" in value or "twitter.com/" in value:
+        return True
+    return bool(re.match(r"^[\w.-]+\.[a-zA-Z]{2,}(/|$)", value))

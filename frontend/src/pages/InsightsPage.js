@@ -18,12 +18,13 @@ function InsightCard({ insight }) {
   const conf = insight.confidence?.toLowerCase() || "low";
   let botProbability = conf === "high" ? 90 : conf === "medium" ? 50 : 20;
 
+  // Confidence bar: green = high signal quality, amber = medium, gray = low
   const barColor =
-    botProbability >= 70
-      ? "bg-red-500"
-      : botProbability >= 30
+    conf === "high"
+      ? "bg-emerald-500"
+      : conf === "medium"
         ? "bg-amber-400"
-        : "bg-emerald-500";
+        : "bg-gray-300";
 
   return (
     <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm hover:shadow-md transition-shadow">
@@ -90,18 +91,21 @@ function InsightCard({ insight }) {
 
 export default function InsightsPage() {
   const [insights, setInsights] = useState([]);
+  const [linkResearch, setLinkResearch] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     fetch("http://localhost:5000/api/get-results")
       .then((res) => res.json())
       .then((result) => {
-        if (result.status !== "ok" || !result.anomalies) {
+        if (result.status !== "ok") {
           setLoading(false);
           return;
         }
 
-        const formatted = result.anomalies.map((a, i) => {
+        setLinkResearch(result.link_research || null);
+
+        const formatted = (result.anomalies || []).map((a, i) => {
           const ai = a.ai_insight || {};
           return {
             id: `ins_${i}`,
@@ -137,6 +141,60 @@ export default function InsightsPage() {
             Plain-English explanations for detected anomalies. We analyze the shape of the spike, account age, and velocity to tell you <i>why</i> it happened.
           </p>
         </div>
+
+        {linkResearch && (
+          <div className="mb-8 bg-white border border-gray-200 rounded-xl p-6 shadow-sm">
+            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-4">
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900">Link Deep Research</h2>
+                <p className="text-xs text-gray-500 mt-1 break-all">{linkResearch.url}</p>
+              </div>
+              <div className="text-right">
+                <p className="text-xs uppercase tracking-wider text-gray-400 font-semibold">Virality Score</p>
+                <p className="text-2xl font-bold text-indigo-600">{linkResearch.virality?.score ?? 0}/100</p>
+                <p className="text-sm text-gray-600 capitalize">{linkResearch.assessment?.verdict || linkResearch.virality?.label || "normal"}</p>
+              </div>
+            </div>
+
+            <p className="text-sm text-gray-700 leading-relaxed mb-4">
+              {linkResearch.assessment?.summary || "No summary available for this link."}
+            </p>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4 text-sm">
+              <div className="rounded-lg border border-gray-100 bg-gray-50 p-3">
+                <p className="text-xs uppercase tracking-wider text-gray-400">Engagement Signal</p>
+                <p className="text-gray-900 font-semibold mt-1">{linkResearch.virality?.breakdown?.engagement ?? 0}</p>
+              </div>
+              <div className="rounded-lg border border-gray-100 bg-gray-50 p-3">
+                <p className="text-xs uppercase tracking-wider text-gray-400">Conversation Signal</p>
+                <p className="text-gray-900 font-semibold mt-1">{linkResearch.virality?.breakdown?.conversation ?? 0}</p>
+              </div>
+              <div className="rounded-lg border border-gray-100 bg-gray-50 p-3">
+                <p className="text-xs uppercase tracking-wider text-gray-400">News Signal</p>
+                <p className="text-gray-900 font-semibold mt-1">{linkResearch.virality?.breakdown?.news ?? 0}</p>
+              </div>
+            </div>
+
+            {Array.isArray(linkResearch.sources) && linkResearch.sources.length > 0 && (
+              <div>
+                <p className="text-xs uppercase tracking-wider text-gray-400 font-semibold mb-2">Top Evidence Sources</p>
+                <div className="space-y-2">
+                  {linkResearch.sources.slice(0, 5).map((src, idx) => (
+                    <a
+                      key={`src_${idx}`}
+                      href={src.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="block text-sm text-indigo-700 hover:text-indigo-900 hover:underline break-words"
+                    >
+                      {src.title || src.url}
+                    </a>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Vertical Card Layout */}
         <div className="space-y-5">

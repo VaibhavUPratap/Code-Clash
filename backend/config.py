@@ -8,9 +8,7 @@ class Config:
     OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
     OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
 
-    REDDIT_CLIENT_ID = os.getenv("REDDIT_CLIENT_ID", "")
-    REDDIT_CLIENT_SECRET = os.getenv("REDDIT_CLIENT_SECRET", "")
-    REDDIT_USER_AGENT = os.getenv("REDDIT_USER_AGENT", "TrendAnomalyFinder/1.0")
+    TWITTER_BEARER_TOKEN = os.getenv("TWITTER_BEARER_TOKEN", "")
 
     # Detection thresholds
     ZSCORE_THRESHOLD = float(os.getenv("ZSCORE_THRESHOLD", "2.5"))

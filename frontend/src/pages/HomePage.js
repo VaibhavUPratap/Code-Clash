@@ -4,14 +4,43 @@ import Footer from "../components/Footer";
 
 /* ─── HomePage ───────────────────────────────────────────────── */
 
+const ANALYSIS_STEPS = [
+  { label: "Loading data", detail: "Parsing time-series records..." },
+  { label: "Detecting anomalies", detail: "Running Z-score & IQR analysis..." },
+  { label: "AI explanations", detail: "Generating insights with GPT..." },
+  { label: "Finalizing", detail: "Building your dashboard..." },
+];
+
 export default function HomePage() {
   const navigate = useNavigate();
   const [username, setUsername] = useState("");
   const [file, setFile] = useState(null);
   const [dragOver, setDragOver] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [loadStep, setLoadStep] = useState(0);
   const [error, setError] = useState(null);
   const fileRef = useRef(null);
+  const stepTimerRef = useRef(null);
+
+  function startStepAnimation() {
+    setLoadStep(0);
+    let currentStep = 0;
+    // Cycle through steps every ~8 seconds; stop at last step
+    stepTimerRef.current = setInterval(() => {
+      currentStep += 1;
+      if (currentStep >= ANALYSIS_STEPS.length - 1) {
+        clearInterval(stepTimerRef.current);
+        setLoadStep(ANALYSIS_STEPS.length - 1);
+      } else {
+        setLoadStep(currentStep);
+      }
+    }, 8000);
+  }
+
+  function stopStepAnimation() {
+    clearInterval(stepTimerRef.current);
+    setLoadStep(0);
+  }
 
   function handleDrop(e) {
     e.preventDefault();
@@ -23,13 +52,14 @@ export default function HomePage() {
   const handleStartAnalysis = async () => {
     setLoading(true);
     setError(null);
+    startStepAnimation();
     try {
       const formData = new FormData();
       if (file) {
         formData.append("file", file);
       } else if (username) {
-        formData.append("source", "reddit");
-        formData.append("sub", username);
+        formData.append("source", "twitter");
+        formData.append("handle", username);
       } else {
         formData.append("source", "sample");
       }
@@ -49,6 +79,7 @@ export default function HomePage() {
       console.error(err);
       setError("Failed to connect to the server.");
     } finally {
+      stopStepAnimation();
       setLoading(false);
     }
   };
@@ -142,11 +173,11 @@ export default function HomePage() {
 
             {/* Username */}
             <label className="block text-sm font-medium text-gray-700 mb-1.5">
-              Subreddit <span className="text-gray-400 font-normal">(optional)</span>
+              Twitter Handle or Tweet URL <span className="text-gray-400 font-normal">(optional)</span>
             </label>
             <input
               type="text"
-              placeholder="e.g. worldnews"
+              placeholder="e.g. elonmusk OR https://x.com/..."
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               className="w-full px-4 py-2.5 rounded-lg border border-gray-200 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-colors"
@@ -184,6 +215,40 @@ export default function HomePage() {
                 </p>
               )}
             </div>
+
+            {/* Loading progress */}
+            {loading && (
+              <div className="mt-6 rounded-xl border border-indigo-100 bg-indigo-50/60 px-5 py-4">
+                <div className="flex items-center gap-3 mb-3">
+                  <svg className="w-4 h-4 text-indigo-500 animate-spin" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4l3-3-3-3v4a8 8 0 100 16v-4l-3 3 3 3v-4a8 8 0 01-8-8z" />
+                  </svg>
+                  <span className="text-sm font-semibold text-indigo-700">
+                    {ANALYSIS_STEPS[loadStep]?.label}
+                  </span>
+                  <span className="ml-auto text-[10px] text-indigo-400 font-mono">
+                    Step {loadStep + 1}/{ANALYSIS_STEPS.length}
+                  </span>
+                </div>
+                <p className="text-xs text-indigo-500 mb-3">{ANALYSIS_STEPS[loadStep]?.detail}</p>
+                {/* Step dots */}
+                <div className="flex gap-1.5">
+                  {ANALYSIS_STEPS.map((s, i) => (
+                    <div
+                      key={i}
+                      className={`flex-1 h-1 rounded-full transition-all duration-700 ${
+                        i < loadStep
+                          ? "bg-indigo-500"
+                          : i === loadStep
+                            ? "bg-indigo-400 animate-pulse"
+                            : "bg-indigo-100"
+                      }`}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
 
             {error && (
               <p className="text-sm text-red-600 mt-4 text-center">{error}</p>

@@ -1,7 +1,8 @@
-Flask==3.0.0
-flask-cors==4.0.0
-pandas==2.1.2
-numpy==1.26.1
-scipy==1.11.3
-python-dotenv==1.0.0
-openai==1.10.0
+Flask
+flask-cors
+pandas
+numpy
+scipy
+python-dotenv
+openai
+tweepy

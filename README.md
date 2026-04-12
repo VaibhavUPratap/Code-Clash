@@ -9,7 +9,7 @@ A full-stack hackathon project that analyses social media engagement time-series
 ```
 ┌──────────────────────────────────────────────────────┐
 │  React Frontend (port 3000)                          │
-│  Home ▸ Dashboard ▸ Alerts ▸ Insights                │
+│  Home ▸ Dashboard ▸ Alerts ▸ Insights ▸ Research     │
 └───────────────────┬──────────────────────────────────┘
                     │ HTTP (axios)
 ┌───────────────────▼──────────────────────────────────┐
@@ -17,7 +17,7 @@ A full-stack hackathon project that analyses social media engagement time-series
 │  /api/analyze  /api/fetch-data  /api/get-results     │
 ├──────────────┬──────────────────┬────────────────────┤
 │ data_service │ detection_service│ ai_agent_service   │
-│ CSV / Reddit │ Z-score / IQR    │ OpenAI / mock      │
+│ CSV / Twitter│ Z-score / IQR    │ OpenAI / mock      │
 └──────────────┴──────────────────┴────────────────────┘
 ```
 
@@ -52,9 +52,10 @@ npm start
 | Method | Endpoint            | Description                                    |
 |--------|---------------------|------------------------------------------------|
 | GET    | `/api/health`       | Health check                                   |
-| GET    | `/api/fetch-data`   | Return sample data (`?source=reddit&sub=NAME`) |
+| GET    | `/api/fetch-data`   | Return sample data (`?source=twitter&handle=NAME`) |
 | POST   | `/api/fetch-data`   | Upload CSV file                                |
-| POST   | `/api/analyze`      | Run full pipeline (form: `source`, `file`)     |
+| POST   | `/api/analyze`      | Run full pipeline (form: `source`, `file`, `handle`) |
+| POST   | `/api/research-link`| Deep URL research (virality + evidence)         |
 | GET    | `/api/get-results`  | Return last cached analysis result             |
 
 ### POST `/api/analyze` response shape
@@ -87,9 +88,33 @@ npm start
     "severity_breakdown": { "critical": 5, "medium": 6, "low": 7 },
     "type_breakdown": { "spikes": 12, "drops": 6 },
     "averages": { "likes": 1023.4, "comments": 153.1, "shares": 80.6 }
+  },
+  "link_research": {
+    "url": "https://x.com/...",
+    "platform": "x",
+    "virality": { "score": 78.6, "label": "viral", "confidence": "high" },
+    "assessment": {
+      "verdict": "viral",
+      "summary": "This post appears viral based on strong engagement and pickup signals."
+    },
+    "sources": [{ "title": "Source post", "url": "https://x.com/..." }]
   }
 }
 ```
+
+### POST `/api/research-link` request and response
+
+Request body:
+
+```json
+{ "url": "https://x.com/<user>/status/<tweet_id>" }
+```
+
+Returns URL-level deep research with:
+- platform metrics (for X/Twitter links when API access is available)
+- Google News mention counts (24h and 7d)
+- virality score (0-100) with breakdown
+- LLM or heuristic verdict (`viral | trending | normal`)
 
 ---
 
@@ -99,9 +124,7 @@ npm start
 |-----------------------|------------------|--------------------------------------|
 | `OPENAI_API_KEY`      | *(empty)*        | Leave blank to use mock AI responses |
 | `OPENAI_MODEL`        | `gpt-4o-mini`    | OpenAI model                         |
-| `REDDIT_CLIENT_ID`    | *(empty)*        | Reddit API client ID                 |
-| `REDDIT_CLIENT_SECRET`| *(empty)*        | Reddit API secret                    |
-| `ZSCORE_THRESHOLD`    | `2.5`            | Z-score cut-off for anomaly          |
+| `TWITTER_BEARER_TOKEN`| *(empty)*        | Twitter API Bearer Token             |
 | `IQR_MULTIPLIER`      | `1.5`            | IQR fence multiplier                 |
 | `ROLLING_WINDOW`      | `7`              | Days for rolling mean/std            |
 | `SEVERITY_MEDIUM`     | `3.0`            | Z-score threshold for medium         |
@@ -160,6 +183,7 @@ When `OPENAI_API_KEY` is not set, a deterministic rule-based mock is used so the
 - ✅ Multi-metric anomaly detection (likes, comments, shares, posts)
 - ✅ Interactive Plotly chart with anomaly markers colour-coded by severity
 - ✅ AI insight panel with cause + recommendation per anomaly
-- ✅ CSV upload + Reddit live data + bundled sample
+- ✅ Deep Research page with citations + signal timeline for URL analysis
+- ✅ CSV upload + Twitter live data + bundled sample
 - ✅ Clean dark-mode UI with responsive design
 - ✅ Modular backend architecture (swap OpenAI → any LLM in one file)

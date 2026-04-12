@@ -7,6 +7,7 @@ import DashboardPage from "./pages/DashboardPage";
 import AlertsPage from "./pages/AlertsPage";
 import InsightsPage from "./pages/InsightsPage";
 import PredictionPage from "./pages/PredictionPage";
+import DeepResearchPage from "./pages/DeepResearchPage";
 
 function App() {
   return (
@@ -20,6 +21,7 @@ function App() {
             <Route path="/alerts" element={<AlertsPage />} />
             <Route path="/insights" element={<InsightsPage />} />
             <Route path="/prediction" element={<PredictionPage />} />
+            <Route path="/research" element={<DeepResearchPage />} />
           </Routes>
         </main>
       </div>

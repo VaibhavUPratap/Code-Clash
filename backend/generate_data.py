@@ -50,10 +50,11 @@ def generate_synthetic_data(username="mock_user", days=90):
             shares = int(shares * 0.5)
             
         data.append({
-            "timestamp": current_date.strftime("%Y-%m-%d"),
+            "date": current_date.strftime("%Y-%m-%d"),
             "likes": max(0, likes),
             "comments": max(0, comments),
-            "shares": max(0, shares)
+            "shares": max(0, shares),
+            "posts": 1,
         })
         
     df = pd.DataFrame(data)

@@ -25,8 +25,7 @@
 }
 
 body {
-  background-color: var(--bg-primary);
-  color: var(--text-primary);
+  /* Background is controlled per-page via Tailwind; avoid hard override here */
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
   line-height: 1.6;
 }
@@ -46,13 +45,7 @@ header {
   padding: 2rem 0;
 }
 
-h1 {
-  font-size: 2.5rem;
-  background: linear-gradient(135deg, #60a5fa, #c084fc);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  margin-bottom: 0.5rem;
-}
+/* h1 styles are handled per-page via Tailwind classes */
 
 .subtitle {
   color: var(--text-secondary);

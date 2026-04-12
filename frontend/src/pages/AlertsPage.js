@@ -144,7 +144,8 @@ export default function AlertsPage() {
         }
         
         const allAlerts = result.anomalies.map((a, i) => {
-          const severity = Math.abs(a.z_score) > 3 ? "critical" : "medium";
+          // Use the backend's pre-computed severity (low / medium / critical)
+          const severity = a.severity || (Math.abs(a.z_score) >= 4.5 ? "critical" : Math.abs(a.z_score) >= 3.0 ? "medium" : "low");
           
           return {
             id: `alrt_${a.metric}_${i}_${a.date.replace(/-/g, "")}`,
