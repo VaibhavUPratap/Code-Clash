@@ -2,154 +2,53 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
-  --bg-primary: #0f172a;
-  --bg-secondary: #1e293b;
-  --text-primary: #f8fafc;
-  --text-secondary: #94a3b8;
-  --accent-primary: #3b82f6;
-  --accent-glow: rgba(59, 130, 246, 0.5);
-  --danger: #ef4444;
-  --success: #22c55e;
-  --warning: #f59e0b;
-  
-  --radius-sm: 8px;
-  --radius-md: 16px;
-  --radius-lg: 24px;
-}
-
-* {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
-}
-
-body {
-  /* Background is controlled per-page via Tailwind; avoid hard override here */
-  font-family: 'Inter', system-ui, -apple-system, sans-serif;
-  line-height: 1.6;
-}
-
-/* Base App Layout */
-.app-container {
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 2rem;
-  display: flex;
-  flex-direction: column;
-  gap: 2rem;
-}
-
-header {
-  text-align: center;
-  padding: 2rem 0;
-}
-
-/* h1 styles are handled per-page via Tailwind classes */
-
-.subtitle {
-  color: var(--text-secondary);
-  font-size: 1.1rem;
-}
-
-/* Glassmorphism Cards */
-.card {
-  background: var(--bg-secondary);
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  border-radius: var(--radius-md);
-  padding: 1.5rem;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
-}
-
-.card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.3);
-}
-
-/* Upload Section */
-.upload-container {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 1rem;
-  padding: 3rem;
-  border: 2px dashed rgba(255,255,255,0.2);
-  border-radius: var(--radius-lg);
-  cursor: pointer;
-  transition: all 0.3s ease;
-}
-
-.upload-container:hover {
-  border-color: var(--accent-primary);
-  background: rgba(59, 130, 246, 0.05);
-}
-
-.btn-primary {
-  background: linear-gradient(135deg, var(--accent-primary), #2563eb);
-  color: white;
-  border: none;
-  padding: 0.75rem 1.5rem;
-  font-size: 1rem;
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  font-weight: 600;
-  transition: all 0.2s ease;
-  box-shadow: 0 0 15px var(--accent-glow);
-}
-
-.btn-primary:hover {
-  transform: scale(1.05);
-  box-shadow: 0 0 25px var(--accent-glow);
-}
-
-.btn-primary:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-  transform: none;
-  box-shadow: none;
-}
-
-/* Analysis Results Dashboard */
-.dashboard-grid {
-  display: grid;
-  grid-template-columns: 2fr 1fr;
-  gap: 2rem;
-}
-
-@media (max-width: 900px) {
-  .dashboard-grid {
-    grid-template-columns: 1fr;
+@layer base {
+  body {
+    @apply bg-zinc-950 text-zinc-300 antialiased selection:bg-indigo-500/30 selection:text-indigo-200;
   }
 }
 
-/* Anomaly List */
-.anomaly-item {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  padding: 1rem;
-  border-radius: var(--radius-sm);
-  background: rgba(0,0,0,0.2);
-  margin-bottom: 1rem;
-  border-left: 4px solid var(--accent-primary);
+/* Custom Webkit Scrollbars for Premium feel */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
 }
 
-.anomaly-item.spike {
-  border-left-color: var(--warning);
-}
-.anomaly-item.drop {
-  border-left-color: var(--danger);
+::-webkit-scrollbar-track {
+  @apply bg-transparent;
 }
 
-.anomaly-type-viral { color: var(--success); }
-.anomaly-type-bot { color: var(--warning); }
-.anomaly-type-crisis { color: var(--danger); }
+::-webkit-scrollbar-thumb {
+  @apply bg-zinc-800 rounded-full hover:bg-zinc-700 transition-colors;
+}
 
-/* Loader */
+/* Utility classes for subtle glass effects and glows */
+@layer utilities {
+  .glow-red {
+    box-shadow: 0 0 12px rgba(239, 68, 68, 0.4);
+  }
+
+  .glow-indigo {
+    box-shadow: 0 0 12px rgba(99, 102, 241, 0.4);
+  }
+
+  .glow-emerald {
+    box-shadow: 0 0 12px rgba(16, 185, 129, 0.3);
+  }
+
+  .glass-panel {
+    @apply bg-zinc-900/40 backdrop-blur-md border border-white/5;
+  }
+
+  .glass-card {
+    @apply bg-zinc-900/60 backdrop-blur-sm border border-zinc-800/50 shadow-xl;
+  }
+}
+
+/* Base App Layout (if any lingering non-tailwind classes exist from legacy) */
 .loader {
-  border: 4px solid rgba(255,255,255,0.1);
-  border-top: 4px solid var(--accent-primary);
+  border: 4px solid rgba(255, 255, 255, 0.05);
+  border-top: 4px solid #6366f1;
   border-radius: 50%;
   width: 40px;
   height: 40px;
@@ -158,6 +57,11 @@ header {
 }
 
 @keyframes spin {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
+  0% {
+    transform: rotate(0deg);
+  }
+
+  100% {
+    transform: rotate(360deg);
+  }
 }

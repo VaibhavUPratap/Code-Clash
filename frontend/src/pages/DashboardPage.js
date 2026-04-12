@@ -21,10 +21,10 @@ const METRICS = [
 ];
 
 const DATE_RANGES = [
-  { key: "7d", label: "7D" },
-  { key: "30d", label: "30D" },
-  { key: "60d", label: "60D" },
-  { key: "all", label: "All" },
+  { key: "7d", label: "7 Days" },
+  { key: "30d", label: "30 Days" },
+  { key: "60d", label: "60 Days" },
+  { key: "all", label: "All Time" },
 ];
 
 /* ─── Helpers ────────────────────────────────────────────────── */
@@ -54,14 +54,25 @@ function ChartTooltip({ active, payload, label }) {
   const d = payload[0]?.payload;
   if (!d) return null;
   return (
-    <div className="bg-white rounded-lg shadow-lg border border-gray-100 px-4 py-3 text-xs">
-      <p className="font-medium text-gray-900 mb-1">{d.label || label}</p>
-      <div className="space-y-0.5 text-gray-500">
-        <p>Value: <span className="text-gray-900 font-medium">{d.value?.toLocaleString()}</span></p>
+    <div className="glass-panel shadow-2xl px-4 py-3 text-xs w-48 rounded-lg relative overflow-hidden">
+      <div className="absolute inset-0 bg-gradient-to-b from-indigo-500/10 to-transparent pointer-events-none" />
+      <p className="font-semibold text-zinc-100 mb-2 relative z-10">{d.label || label}</p>
+      <div className="space-y-1.5 text-zinc-400 relative z-10 font-mono">
+        <p className="flex justify-between">
+          <span>Vol:</span>
+          <span className="text-zinc-100 font-medium">{d.value?.toLocaleString()}</span>
+        </p>
+        <p className="flex justify-between">
+          <span>Baseline:</span>
+          <span className="text-zinc-500">~{d.lower?.toLocaleString()}</span>
+        </p>
         {d.isAnomaly && (
-          <p className="text-red-600 font-semibold mt-1">
-            ⚠ {d.severity === "critical" ? "Critical" : "Medium"} anomaly ({d.z_score > 0 ? "+" : ""}{d.z_score}z)
-          </p>
+          <div className="mt-3 pt-2 border-t border-white/10">
+            <p className={`font-semibold flex items-center justify-between ${d.severity === "critical" ? "text-red-400" : "text-amber-400"}`}>
+              <span>⚠ {d.severity === "critical" ? "CRIT" : "WARN"}</span>
+              <span>{d.z_score > 0 ? "+" : ""}{d.z_score}z</span>
+            </p>
+          </div>
         )}
       </div>
     </div>
@@ -81,11 +92,10 @@ export default function DashboardPage() {
       .then((res) => res.json())
       .then((result) => {
         if (result.status !== "ok" || !result.data) return;
-        
+
         const data_points = result.data;
-        // Filter anomalies for the currently selected metric
         const anomalies = (result.anomalies || []).filter(a => a.metric === metric);
-        
+
         const anomalyMap = {};
         anomalies.forEach((a) => {
           anomalyMap[a.date] = a;
@@ -95,22 +105,21 @@ export default function DashboardPage() {
           const dateObj = new Date(dp.date);
           const isAnomaly = !!anomalyMap[dp.date];
           const aInfo = anomalyMap[dp.date];
-          
+
           let severity = null;
           if (aInfo) {
-             severity = Math.abs(aInfo.z_score) > 3 ? "critical" : "medium";
+            severity = Math.abs(aInfo.z_score) > 3 ? "critical" : "medium";
           }
 
           return {
             ...dp,
-            label: `${dateObj.toLocaleString("default", { month: "short" })} ${dateObj.getDate()}`,
+            label: `${dateObj.toLocaleString("default", { month: "short", day: "numeric" })}`,
             value: dp[metric],
-            // Create a pseudo-band roughly based on typical variation or constant relative size
-            upper: dp[metric] + (dp[metric] * 0.15 + 50),
+            upper: dp[metric] + (dp[metric] * 0.15 + 50), // simplistic bounds
             lower: Math.max(0, dp[metric] - (dp[metric] * 0.15 + 50)),
             isAnomaly,
             severity,
-            z_score: aInfo ? aInfo.z_score : 0,
+            z_score: aInfo ? (Math.round(aInfo.z_score * 100) / 100) : 0,
           };
         });
         setRawData(points);
@@ -120,153 +129,158 @@ export default function DashboardPage() {
 
   const data = useMemo(() => filterByRange(rawData, range), [range, rawData]);
   const stats = useMemo(() => getStats(data), [data]);
-  
-  // Apply additional sensitivity filter on frontend for anomalies shown in the list
+
   const anomalies = useMemo(() => {
-     // Sensitivity 100 = show everything (Z > 2), Sensitivity 10 = show only extreme anomalies
-     const zThreshold = 2 + ((100 - sensitivity) / 100) * 3; // scales from Z=2 to Z=5
-     return data.filter((d) => d.isAnomaly && Math.abs(d.z_score) >= zThreshold);
+    const zThreshold = 2 + ((100 - sensitivity) / 100) * 3;
+    return data.filter((d) => d.isAnomaly && Math.abs(d.z_score) >= zThreshold);
   }, [data, sensitivity]);
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-8 gap-4">
+    <div className="flex-1 flex flex-col md:flex-row w-full max-w-full">
+
+      {/* Left Pane: Controls */}
+      <aside className="w-full md:w-64 border-r border-white/5 glass-panel flex-shrink-0 z-10 shadow-2xl hidden md:block">
+        <div className="p-5 border-b border-white/5">
+          <h2 className="text-sm font-semibold tracking-wide text-zinc-100">Explorer</h2>
+          <p className="text-[10px] text-zinc-500 mt-1 uppercase tracking-widest font-mono">Engine: {data.length} pts</p>
+        </div>
+
+        <div className="p-5 space-y-8">
           <div>
-            <h1 className="text-xl font-semibold text-gray-900">Dashboard</h1>
-            <p className="text-sm text-gray-400 mt-0.5">
-              {data.length} data points · {stats.total} anomalies detected
-            </p>
+            <label className="block text-[10px] font-semibold text-indigo-400 uppercase tracking-widest mb-3">
+              Target Metric
+            </label>
+            <select
+              value={metric}
+              onChange={(e) => setMetric(e.target.value)}
+              className="w-full bg-zinc-950/50 border border-white/10 px-3 py-2 text-sm text-zinc-300 rounded-lg focus:outline-none focus:border-indigo-500/50 shadow-[inset_0_2px_4px_rgba(0,0,0,0.2)]"
+            >
+              {METRICS.map(({ key, label }) => (
+                <option key={key} value={key}>{label}</option>
+              ))}
+            </select>
           </div>
-          <div className="flex items-center gap-2">
-            {DATE_RANGES.map(({ key, label }) => (
-              <button
-                key={key}
-                onClick={() => setRange(key)}
-                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
-                  range === key
-                    ? "bg-gray-900 text-white"
-                    : "bg-white text-gray-500 border border-gray-200 hover:border-gray-300 hover:text-gray-700"
-                }`}
-              >
-                {label}
-              </button>
-            ))}
+
+          <div>
+            <label className="block text-[10px] font-semibold text-indigo-400 uppercase tracking-widest mb-3">
+              Time Horizon
+            </label>
+            <div className="flex flex-col gap-1.5">
+              {DATE_RANGES.map(({ key, label }) => (
+                <button
+                  key={key}
+                  onClick={() => setRange(key)}
+                  className={`text-left px-3 py-2 text-xs rounded-lg transition-all duration-200 ${range === key ? "bg-indigo-500/10 text-indigo-300 border border-indigo-500/20 font-medium" : "text-zinc-500 hover:bg-zinc-800/50 hover:text-zinc-300 border border-transparent"
+                    }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-[10px] font-semibold text-indigo-400 uppercase tracking-widest mb-3">
+              Z-Score Filter
+            </label>
+            <input
+              type="range"
+              min={10}
+              max={100}
+              value={sensitivity}
+              onChange={(e) => setSensitivity(Number(e.target.value))}
+              className="w-full h-1 bg-zinc-800 appearance-none cursor-pointer rounded-full accent-indigo-500 shadow-[0_0_10px_rgba(99,102,241,0.5)]"
+            />
+            <div className="flex justify-between text-[10px] text-zinc-500 mt-3 font-mono">
+              <span className="hover:text-zinc-300 transition-colors">HIGH Z</span>
+              <span className="font-bold text-indigo-400">{sensitivity}</span>
+              <span className="hover:text-zinc-300 transition-colors">LOW Z</span>
+            </div>
           </div>
         </div>
+      </aside>
 
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
-          <StatCard
-            label="Total Anomalies"
-            value={stats.total}
-            sub={`across ${data.length} days`}
-            color="text-gray-900"
-            icon={
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
-              </svg>
-            }
-          />
-          <StatCard
-            label="Critical Anomalies"
-            value={stats.critical}
-            sub="requires attention"
-            color="text-red-600"
-            icon={
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m0 3.75h.008v.008H12v-.008zM21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-            }
-          />
-          <StatCard
-            label="Avg Value"
-            value={stats.avgEngagement.toLocaleString()}
-            sub="per data point"
-            color="text-gray-900"
-            icon={
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z" />
-              </svg>
-            }
-          />
+      {/* Main content: Grid & Chart */}
+      <section className="flex-1 flex flex-col min-h-0 bg-zinc-950 relative">
+        <div className="absolute top-0 right-0 w-96 h-96 bg-indigo-500/10 rounded-full blur-[120px] pointer-events-none" />
+
+        {/* Top bar metrics */}
+        <div className="flex flex-wrap items-center border-b border-white/5 divide-x divide-white/5 bg-zinc-900/20 backdrop-blur-md relative z-10">
+          <StatBox label="Events Found" value={stats.total} sub={`${range === 'all' ? 'All Time' : range}`} color="text-zinc-100" />
+          <StatBox label="Critical Overrides" value={stats.critical} sub={`Z-score > 3.0`} color="text-red-400 glow-red-text" />
+          <StatBox label="Moving Average" value={stats.avgEngagement.toLocaleString()} sub={`${metric} / day`} color="text-indigo-300" />
         </div>
 
-        {/* Main content grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-          {/* Chart area (3 cols) */}
-          <div className="lg:col-span-3 bg-white rounded-xl border border-gray-200 p-5">
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-5 gap-3">
+        {/* Chart View */}
+        <div className="flex-1 flex flex-col p-6 overflow-y-auto relative z-10">
+
+          <div className="glass-card rounded-2xl p-6 mb-8">
+            <div className="flex items-center justify-between mb-8">
               <div>
-                <h2 className="text-sm font-semibold text-gray-900">
-                  {METRICS.find((m) => m.key === metric)?.label} Over Time
-                </h2>
-                <p className="text-xs text-gray-400 mt-0.5">
-                  Red markers indicate detected anomalies
-                </p>
+                <h3 className="text-sm font-semibold text-zinc-100 tracking-wide">Activity Topology</h3>
+                <p className="text-[10px] uppercase font-mono tracking-widest text-zinc-500 mt-1">Real-time engagement density</p>
               </div>
-              <div className="flex items-center gap-3 text-xs text-gray-400">
-                <span className="flex items-center gap-1">
-                  <span className="w-2.5 h-0.5 bg-indigo-500 rounded-full inline-block" /> Trend
-                </span>
-                <span className="flex items-center gap-1">
-                  <span className="w-2 h-2 rounded-full bg-red-500 inline-block" /> Anomaly
-                </span>
-                <span className="flex items-center gap-1">
-                  <span className="w-3 h-2 bg-indigo-100 rounded-sm inline-block" /> Band
-                </span>
+              <div className="flex gap-5 text-[10px] font-mono text-zinc-400 uppercase tracking-widest">
+                <span className="flex items-center gap-2"><span className="w-1.5 h-1.5 rounded-full bg-indigo-500 glow-indigo" /> Trend Line</span>
+                <span className="flex items-center gap-2"><span className="w-1.5 h-1.5 bg-red-500 rounded-full glow-red" /> Spike Matrix</span>
+                <span className="flex items-center gap-2"><span className="w-3 h-1 bg-white/10 rounded-full" /> Variance Band</span>
               </div>
             </div>
 
             <div className="w-full h-80">
               <ResponsiveContainer width="100%" height="100%">
-                <ComposedChart data={data} margin={{ top: 10, right: 10, bottom: 0, left: -10 }}>
+                <ComposedChart data={data} margin={{ top: 15, right: 15, bottom: 0, left: -20 }}>
                   <defs>
-                    <linearGradient id="bandFill" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#6366f1" stopOpacity={0.06} />
-                      <stop offset="100%" stopColor="#6366f1" stopOpacity={0.02} />
+                    <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#6366f1" stopOpacity={0.3} />
+                      <stop offset="95%" stopColor="#6366f1" stopOpacity={0} />
                     </linearGradient>
+                    <linearGradient id="bandColor" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#ffffff" stopOpacity={0.03} />
+                      <stop offset="100%" stopColor="#ffffff" stopOpacity={0.01} />
+                    </linearGradient>
+                    <filter id="glow">
+                      <feGaussianBlur stdDeviation="3" result="coloredBlur" />
+                      <feMerge>
+                        <feMergeNode in="coloredBlur" />
+                        <feMergeNode in="SourceGraphic" />
+                      </feMerge>
+                    </filter>
                   </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+
+                  <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
                   <XAxis
                     dataKey="label"
-                    tick={{ fontSize: 11, fill: "#94a3b8" }}
-                    axisLine={{ stroke: "#e2e8f0" }}
+                    tick={{ fontSize: 10, fill: "#71717a", fontFamily: "monospace" }}
+                    axisLine={{ stroke: "#3f3f46" }}
                     tickLine={false}
                     interval={Math.max(Math.floor(data.length / 10), 0)}
                   />
                   <YAxis
-                    tick={{ fontSize: 11, fill: "#94a3b8" }}
+                    tick={{ fontSize: 10, fill: "#71717a", fontFamily: "monospace" }}
                     axisLine={false}
                     tickLine={false}
                     tickFormatter={(v) => (v >= 1000 ? `${(v / 1000).toFixed(1)}k` : v)}
                   />
-                  <Tooltip content={<ChartTooltip />} />
+                  <Tooltip content={<ChartTooltip />} cursor={{ stroke: '#52525b', strokeWidth: 1, strokeDasharray: "4 4" }} />
 
                   {/* Confidence band */}
-                  <Area
-                    dataKey="upper"
-                    stroke="none"
-                    fill="url(#bandFill)"
-                    isAnimationActive={false}
-                  />
-                  <Area
-                    dataKey="lower"
-                    stroke="none"
-                    fill="#fff"
-                    isAnimationActive={false}
-                  />
+                  <Area type="monotone" dataKey="upper" stroke="none" fill="url(#bandColor)" isAnimationActive={false} />
 
-                  {/* Main line */}
+                  {/* Glowing main line */}
                   <Line
                     type="monotone"
                     dataKey={metric}
-                    stroke="#6366f1"
-                    strokeWidth={1.5}
+                    stroke="#818cf8"
+                    strokeWidth={2}
                     dot={false}
-                    activeDot={{ r: 3, stroke: "#6366f1", fill: "#fff", strokeWidth: 1.5 }}
+                    activeDot={{ r: 5, fill: "#818cf8", stroke: "#e0e7ff", strokeWidth: 2 }}
+                    isAnimationActive={false}
+                    filter="url(#glow)"
                   />
+
+                  {/* Glowing Area Fill */}
+                  <Area type="monotone" dataKey={metric} stroke="none" fill="url(#colorValue)" isAnimationActive={false} />
 
                   {/* Anomaly markers */}
                   {anomalies.map((a, i) => (
@@ -274,10 +288,11 @@ export default function DashboardPage() {
                       key={i}
                       x={a.label}
                       y={a[metric] || a.value}
-                      r={a.severity === "critical" ? 5 : 4}
+                      r={4}
                       fill={a.severity === "critical" ? "#ef4444" : "#f59e0b"}
-                      stroke="#fff"
-                      strokeWidth={1.5}
+                      stroke="#18181b"
+                      strokeWidth={2}
+                      className={a.severity === "critical" ? "drop-shadow-[0_0_8px_rgba(239,68,68,0.8)]" : "drop-shadow-[0_0_8px_rgba(245,158,11,0.8)]"}
                     />
                   ))}
                 </ComposedChart>
@@ -285,117 +300,73 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* Controls sidebar (1 col) */}
-          <div className="lg:col-span-1 space-y-5">
-            {/* Metric selector */}
-            <div className="bg-white rounded-xl border border-gray-200 p-5">
-              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
-                Metric
-              </label>
-              <select
-                value={metric}
-                onChange={(e) => setMetric(e.target.value)}
-                className="w-full px-3 py-2 text-sm bg-gray-50 border border-gray-200 rounded-lg text-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400 transition-colors"
-              >
-                {METRICS.map(({ key, label }) => (
-                  <option key={key} value={key}>{label}</option>
-                ))}
-              </select>
-            </div>
-
-            {/* Date range */}
-            <div className="bg-white rounded-xl border border-gray-200 p-5">
-              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
-                Date Range
-              </label>
-              <div className="grid grid-cols-2 gap-2">
-                {DATE_RANGES.map(({ key, label }) => (
-                  <button
-                    key={key}
-                    onClick={() => setRange(key)}
-                    className={`px-3 py-2 text-xs font-medium rounded-lg transition-colors ${
-                      range === key
-                        ? "bg-gray-900 text-white"
-                        : "bg-gray-50 text-gray-500 border border-gray-200 hover:bg-gray-100"
-                    }`}
-                  >
-                    {label}
-                  </button>
-                ))}
+          {/* Table: Filtered List */}
+          <div>
+            <h3 className="text-xs font-semibold text-indigo-400 uppercase tracking-widest mb-4 pl-2">Event Signatures ({anomalies.length})</h3>
+            {anomalies.length === 0 ? (
+              <div className="glass-panel rounded-xl p-8 text-center bg-zinc-900/30">
+                <p className="text-xs font-mono text-zinc-500">No high-variance events detected in current manifold.</p>
               </div>
-            </div>
-
-            {/* Sensitivity */}
-            <div className="bg-white rounded-xl border border-gray-200 p-5">
-              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
-                Sensitivity
-              </label>
-              <input
-                type="range"
-                min={10}
-                max={100}
-                value={sensitivity}
-                onChange={(e) => setSensitivity(Number(e.target.value))}
-                className="w-full h-1.5 bg-gray-200 rounded-full appearance-none cursor-pointer accent-indigo-500"
-              />
-              <div className="flex justify-between text-[10px] text-gray-400 mt-1.5">
-                <span>Low</span>
-                <span className="text-gray-600 font-medium">{sensitivity}%</span>
-                <span>High</span>
+            ) : (
+              <div className="glass-panel rounded-xl overflow-hidden shadow-xl border border-white/5 bg-zinc-900/40">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-white/5 border-b border-white/5 text-[10px] uppercase text-zinc-500 tracking-widest font-semibold">
+                      <th className="py-3 px-5">Timestamp</th>
+                      <th className="py-3 px-5">Severity Level</th>
+                      <th className="py-3 px-5">Magnitude</th>
+                      <th className="py-3 px-5">Z-Score Deviation</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/5 text-sm">
+                    {anomalies.map((a, idx) => (
+                      <tr key={idx} className="group hover:bg-white/5 transition-colors duration-150">
+                        <td className="py-3 px-5 font-mono text-zinc-300 text-xs">{a.label}</td>
+                        <td className="py-3 px-5">
+                          <div className="flex items-center gap-2">
+                            {a.severity === 'critical' ? (
+                              <span className="w-1.5 h-1.5 rounded-full bg-red-500 glow-red animate-pulse" />
+                            ) : (
+                              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.5)]" />
+                            )}
+                            <span className={`text-[10px] uppercase tracking-wider font-bold ${a.severity === 'critical' ? 'text-red-400' : 'text-amber-400'}`}>
+                              {a.severity === 'critical' ? 'Critical' : 'Elevated'}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="py-3 px-5 font-mono text-zinc-200">{a.value?.toLocaleString()}</td>
+                        <td className="py-3 px-5 font-mono text-zinc-400 flex items-center gap-2">
+                          {a.z_score > 0 ? (
+                            <svg className="w-3 h-3 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 10l7-7m0 0l7 7m-7-7v18" /></svg>
+                          ) : (
+                            <svg className="w-3 h-3 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" /></svg>
+                          )}
+                          {Math.abs(a.z_score).toFixed(2)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
-            </div>
-
-            {/* Anomaly list */}
-            <div className="bg-white rounded-xl border border-gray-200 p-5">
-              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">
-                Recent Anomalies
-              </label>
-              <div className="space-y-2.5 max-h-52 overflow-y-auto">
-                {anomalies.length === 0 && (
-                  <p className="text-xs text-gray-400">No anomalies in this range.</p>
-                )}
-                {anomalies.map((a, i) => (
-                  <div
-                    key={i}
-                    className="flex items-start gap-2.5 px-3 py-2.5 rounded-lg bg-gray-50 border border-gray-100"
-                  >
-                    <span
-                      className={`mt-0.5 w-2 h-2 rounded-full flex-shrink-0 ${
-                        a.severity === "critical" ? "bg-red-500" : "bg-amber-400"
-                      }`}
-                    />
-                    <div className="min-w-0">
-                      <p className="text-xs font-medium text-gray-800 truncate">
-                        {a.label}
-                      </p>
-                      <p className="text-[10px] text-gray-400">
-                        {a.severity} · {metric} {a.value?.toLocaleString()}
-                      </p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
+            )}
           </div>
+
         </div>
-      </div>
+      </section>
+
     </div>
   );
 }
 
-/* ─── Stat Card ──────────────────────────────────────────────── */
+/* ─── Minimal Stat Box ───────────────────────────────────────── */
 
-function StatCard({ label, value, sub, color, icon }) {
+function StatBox({ label, value, sub, color }) {
   return (
-    <div className="bg-white rounded-xl border border-gray-200 px-5 py-4 flex items-start gap-4">
-      <div className="w-9 h-9 rounded-lg bg-gray-50 text-gray-400 flex items-center justify-center flex-shrink-0 mt-0.5">
-        {icon}
-      </div>
-      <div>
-        <p className="text-xs font-medium text-gray-400 mb-0.5">{label}</p>
-        <p className={`text-2xl font-semibold ${color}`}>{value}</p>
-        <p className="text-[10px] text-gray-400 mt-0.5">{sub}</p>
-      </div>
+    <div className="flex-1 px-6 py-5 min-w-[150px] relative overflow-hidden group">
+      <div className="absolute inset-0 bg-white/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+      <div className="text-[10px] uppercase font-semibold tracking-widest text-zinc-500 mb-1.5">{label}</div>
+      <div className={`text-2xl font-mono font-medium ${color} leading-none mb-1 shadow-sm`}>{value}</div>
+      <div className="text-[10px] text-zinc-600 font-mono uppercase">{sub}</div>
     </div>
   );
 }

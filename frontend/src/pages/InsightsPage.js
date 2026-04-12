@@ -1,213 +1,114 @@
 import React, { useState, useEffect } from "react";
 
-/* ─── Helpers ────────────────────────────────────────────────── */
-
-const CLASSIFICATION_STYLES = {
-  "bot": "bg-red-50 text-red-700 border-red-200",
-  "crisis": "bg-amber-50 text-amber-700 border-amber-200",
-  "viral": "bg-emerald-50 text-emerald-700 border-emerald-200",
-  "Bot Activity": "bg-red-50 text-red-700 border-red-200",
-  "Possible Crisis": "bg-amber-50 text-amber-700 border-amber-200",
-  "Viral": "bg-emerald-50 text-emerald-700 border-emerald-200",
-};
-
-/* ─── Components ─────────────────────────────────────────────── */
-
-function InsightCard({ insight }) {
-  // Determine progress bar color based on confidence
-  const conf = insight.confidence?.toLowerCase() || "low";
-  let botProbability = conf === "high" ? 90 : conf === "medium" ? 50 : 20;
-
-  // Confidence bar: green = high signal quality, amber = medium, gray = low
-  const barColor =
-    conf === "high"
-      ? "bg-emerald-500"
-      : conf === "medium"
-        ? "bg-amber-400"
-        : "bg-gray-300";
-
-  return (
-    <div className="bg-white rounded-xl border border-gray-200 p-6 shadow-sm hover:shadow-md transition-shadow">
-      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-6">
-
-        {/* Left side: Header, Metric, Explanation */}
-        <div className="flex-1 space-y-4">
-          <div className="flex items-center gap-3 border-b border-gray-100 pb-3">
-            <span className="text-sm font-semibold text-gray-900 capitalize">
-              {insight.metric} Anomaly
-            </span>
-            <span className="text-xs text-gray-400 font-mono tracking-tight">
-              {insight.date}
-            </span>
-          </div>
-
-          <p className="text-sm text-gray-700 leading-relaxed max-w-2xl">
-            {insight.explanation}
-          </p>
-          {insight.recommendation && (
-            <div className="mt-3 text-sm text-indigo-700 bg-indigo-50 p-3 rounded-lg border border-indigo-100">
-              <strong>Recommendation:</strong> {insight.recommendation}
-            </div>
-          )}
-        </div>
-
-        {/* Right side: Classification & Bot Prob */}
-        <div className="w-full sm:w-64 flex-shrink-0 flex flex-col gap-5 pt-1 sm:pt-0 border-t sm:border-t-0 sm:border-l border-gray-100 sm:pl-6">
-
-          {/* Classification Tag */}
-          <div>
-            <p className="text-[10px] uppercase tracking-wider font-semibold text-gray-400 mb-2">
-              Classification
-            </p>
-            <div
-              className={`inline-flex items-center px-2.5 py-1 rounded-md border text-xs font-medium capitalize ${CLASSIFICATION_STYLES[insight.classification] || "bg-gray-50 text-gray-700 border-gray-200"
-                }`}
-            >
-              {insight.classification}
-            </div>
-          </div>
-
-          {/* Confidence Indicator */}
-          <div>
-            <p className="text-[10px] uppercase tracking-wider font-semibold text-gray-400 mb-2 flex justify-between">
-              <span>AI Confidence</span>
-              <span className="text-gray-900 capitalize">{insight.confidence}</span>
-            </p>
-            <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
-              <div
-                className={`h-full ${barColor} rounded-full transition-all duration-500`}
-                style={{ width: `${botProbability}%` }}
-              />
-            </div>
-          </div>
-
-        </div>
-      </div>
-    </div>
-  );
-}
-
-/* ─── Insights Page ──────────────────────────────────────────── */
-
 export default function InsightsPage() {
   const [insights, setInsights] = useState([]);
-  const [linkResearch, setLinkResearch] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     fetch("http://localhost:5000/api/get-results")
       .then((res) => res.json())
       .then((result) => {
-        if (result.status !== "ok") {
+        if (result.status !== "ok" || !result.anomalies) {
           setLoading(false);
           return;
         }
 
-        setLinkResearch(result.link_research || null);
+        const validInsights = result.anomalies
+          .filter((a) => a.ai_insight)
+          .map((a, index) => {
+            return {
+              id: `ins_${index}`,
+              date: new Date(a.date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
+              metric: a.metric,
+              type: a.type,
+              causeText: a.ai_insight.cause,
+              classification: a.ai_insight.classification || "Unknown",
+              botProbability: a.ai_insight.bot_probability || 0,
+              zScore: a.z_score
+            };
+          });
 
-        const formatted = (result.anomalies || []).map((a, i) => {
-          const ai = a.ai_insight || {};
-          return {
-            id: `ins_${i}`,
-            date: a.date,
-            metric: a.metric,
-            classification: ai.type || "unknown",
-            explanation: ai.cause || "No explanation provided.",
-            confidence: ai.confidence || "low",
-            recommendation: ai.recommendation || "",
-          };
-        });
-
-        // Sort by newest first
-        formatted.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-        setInsights(formatted);
+        setInsights(validInsights);
         setLoading(false);
       })
-      .catch((err) => {
-        console.error("Failed to fetch insights:", err);
+      .catch((e) => {
+        console.error("Error fetching insights:", e);
         setLoading(false);
       });
   }, []);
 
   return (
-    <div className="min-h-screen bg-gray-50/50">
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
-        {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-2xl font-semibold text-gray-900 tracking-tight">
-            Anomaly Insights
-          </h1>
-          <p className="text-sm text-gray-500 mt-2 max-w-xl leading-relaxed">
-            Plain-English explanations for detected anomalies. We analyze the shape of the spike, account age, and velocity to tell you <i>why</i> it happened.
-          </p>
-        </div>
+    <div className="flex-1 p-6 md:p-8 w-full max-w-5xl mx-auto flex flex-col h-screen">
+      <div className="border-b border-white/10 pb-6 mb-8 mt-2">
+        <h1 className="text-2xl font-semibold text-zinc-100 tracking-tight">AI Diagnostics & Trace</h1>
+        <p className="text-[10px] text-zinc-500 mt-2 font-mono uppercase tracking-widest bg-indigo-500/10 px-3 py-1 rounded inline-block border border-indigo-500/20 text-indigo-300">Generated summaries & topological context</p>
+      </div>
 
-        {linkResearch && (
-          <div className="mb-8 bg-white border border-gray-200 rounded-xl p-6 shadow-sm">
-            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-4">
-              <div>
-                <h2 className="text-lg font-semibold text-gray-900">Link Deep Research</h2>
-                <p className="text-xs text-gray-500 mt-1 break-all">{linkResearch.url}</p>
-              </div>
-              <div className="text-right">
-                <p className="text-xs uppercase tracking-wider text-gray-400 font-semibold">Virality Score</p>
-                <p className="text-2xl font-bold text-indigo-600">{linkResearch.virality?.score ?? 0}/100</p>
-                <p className="text-sm text-gray-600 capitalize">{linkResearch.assessment?.verdict || linkResearch.virality?.label || "normal"}</p>
-              </div>
-            </div>
+      <div className="space-y-6 flex-1 overflow-y-auto pb-10">
+        {loading ? (
+          <p className="text-xs font-mono text-indigo-400 animate-pulse text-center py-10">Initializing neural diagnostic logs...</p>
+        ) : insights.length === 0 ? (
+          <div className="glass-panel p-10 rounded-2xl flex flex-col items-center border border-white/5 bg-zinc-900/30">
+            <svg className="w-8 h-8 text-zinc-600 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+            <p className="text-xs font-mono text-zinc-500 italic uppercase">No diagnostic logs available in current manifold.</p>
+          </div>
+        ) : (
+          insights.map((insight) => (
+            <div key={insight.id} className="glass-card rounded-xl overflow-hidden flex flex-col md:flex-row group transition-all duration-300 hover:border-white/10">
 
-            <p className="text-sm text-gray-700 leading-relaxed mb-4">
-              {linkResearch.assessment?.summary || "No summary available for this link."}
-            </p>
+              {/* Left meta block */}
+              <div className="w-full md:w-56 bg-zinc-950/50 p-5 border-b md:border-b-0 md:border-r border-white/5 flex flex-col gap-3 flex-shrink-0 relative overflow-hidden">
+                {/* Glowing edge effect on hover */}
+                <div className="absolute inset-y-0 left-0 w-1 bg-gradient-to-b from-indigo-500 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4 text-sm">
-              <div className="rounded-lg border border-gray-100 bg-gray-50 p-3">
-                <p className="text-xs uppercase tracking-wider text-gray-400">Engagement Signal</p>
-                <p className="text-gray-900 font-semibold mt-1">{linkResearch.virality?.breakdown?.engagement ?? 0}</p>
-              </div>
-              <div className="rounded-lg border border-gray-100 bg-gray-50 p-3">
-                <p className="text-xs uppercase tracking-wider text-gray-400">Conversation Signal</p>
-                <p className="text-gray-900 font-semibold mt-1">{linkResearch.virality?.breakdown?.conversation ?? 0}</p>
-              </div>
-              <div className="rounded-lg border border-gray-100 bg-gray-50 p-3">
-                <p className="text-xs uppercase tracking-wider text-gray-400">News Signal</p>
-                <p className="text-gray-900 font-semibold mt-1">{linkResearch.virality?.breakdown?.news ?? 0}</p>
-              </div>
-            </div>
+                <span className="text-[10px] uppercase font-bold text-zinc-600 tracking-widest">{insight.date}</span>
 
-            {Array.isArray(linkResearch.sources) && linkResearch.sources.length > 0 && (
-              <div>
-                <p className="text-xs uppercase tracking-wider text-gray-400 font-semibold mb-2">Top Evidence Sources</p>
-                <div className="space-y-2">
-                  {linkResearch.sources.slice(0, 5).map((src, idx) => (
-                    <a
-                      key={`src_${idx}`}
-                      href={src.url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="block text-sm text-indigo-700 hover:text-indigo-900 hover:underline break-words"
-                    >
-                      {src.title || src.url}
-                    </a>
-                  ))}
+                <div className="grid grid-cols-2 lg:grid-cols-1 gap-y-2 mt-2">
+                  <div>
+                    <span className="block text-[9px] font-bold text-zinc-500 uppercase tracking-widest">Target Vector</span>
+                    <span className="text-xs text-zinc-300 font-mono flex items-center gap-1.5 mt-0.5">
+                      {insight.metric}
+                      {insight.type === "spike" ? <span className="text-red-400">↑</span> : <span className="text-indigo-400">↓</span>}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="block text-[9px] font-bold text-zinc-500 uppercase tracking-widest">Significance (z)</span>
+                    <span className={`text-xs font-mono font-bold mt-0.5 ${Math.abs(insight.zScore) > 3 ? "text-red-400" : "text-amber-400"}`}>{Math.abs(insight.zScore).toFixed(1)}</span>
+                  </div>
+                </div>
+
+                <div className="mt-auto pt-5 flex flex-col gap-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[9px] text-zinc-500 uppercase tracking-widest font-semibold">Classification</span>
+                    <span className="text-[9px] font-mono font-bold bg-white/5 border border-white/10 px-2 py-0.5 rounded text-zinc-300 uppercase">{insight.classification}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[9px] text-zinc-500 uppercase tracking-widest font-semibold">Bot Probability</span>
+                    <span className={`text-[10px] font-mono font-bold ${insight.botProbability > 60 ? "text-red-400" : "text-indigo-400"}`}>{insight.botProbability}%</span>
+                  </div>
                 </div>
               </div>
-            )}
-          </div>
-        )}
 
-        {/* Vertical Card Layout */}
-        <div className="space-y-5">
-          {loading ? (
-             <div className="text-center text-gray-500 py-12 text-sm">Loading insights...</div>
-          ) : insights.length === 0 ? (
-             <div className="text-center text-gray-500 py-12 text-sm">No insights available. Please run an analysis first.</div>
-          ) : (
-            insights.map((insight) => (
-              <InsightCard key={insight.id} insight={insight} />
-            ))
-          )}
-        </div>
+              {/* Right content block */}
+              <div className="flex-1 p-6 flex flex-col justify-center bg-zinc-900/20">
+                <p className="text-xs text-zinc-200 leading-relaxed font-mono bg-black/40 p-4 border border-white/5 rounded-lg shadow-inner">
+                  <span className="text-indigo-500 font-bold mr-2">{'>_'}</span>
+                  {insight.causeText}
+                </p>
+
+                {insight.botProbability > 60 && (
+                  <div className="mt-4 flex items-center gap-3 bg-red-500/10 border border-red-500/20 text-red-400 text-[10px] uppercase font-bold tracking-widest px-4 py-2.5 rounded-lg w-fit shadow-[inset_0_0_8px_rgba(239,68,68,0.2)] glow-red">
+                    <span className="relative flex h-2.5 w-2.5">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-red-500"></span>
+                    </span>
+                    High automated activity suspected
+                  </div>
+                )}
+              </div>
+            </div>
+          ))
+        )}
       </div>
     </div>
   );

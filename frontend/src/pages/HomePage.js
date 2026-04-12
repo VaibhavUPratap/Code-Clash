@@ -1,409 +1,207 @@
-import React, { useState, useRef } from "react";
-import { useNavigate } from "react-router-dom";
-import Footer from "../components/Footer";
-
-/* ─── HomePage ───────────────────────────────────────────────── */
-
-const ANALYSIS_STEPS = [
-  { label: "Loading data", detail: "Parsing time-series records..." },
-  { label: "Detecting anomalies", detail: "Running Z-score & IQR analysis..." },
-  { label: "AI explanations", detail: "Generating insights with GPT..." },
-  { label: "Finalizing", detail: "Building your dashboard..." },
-];
+import React, { useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 
 export default function HomePage() {
+  const [inputType, setInputType] = useState("username");
+  const [inputValue, setInputValue] = useState("");
+  const [selectedFile, setSelectedFile] = useState(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
   const navigate = useNavigate();
-  const [username, setUsername] = useState("");
-  const [file, setFile] = useState(null);
-  const [dragOver, setDragOver] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [loadStep, setLoadStep] = useState(0);
-  const [error, setError] = useState(null);
-  const fileRef = useRef(null);
-  const stepTimerRef = useRef(null);
-
-  function startStepAnimation() {
-    setLoadStep(0);
-    let currentStep = 0;
-    // Cycle through steps every ~8 seconds; stop at last step
-    stepTimerRef.current = setInterval(() => {
-      currentStep += 1;
-      if (currentStep >= ANALYSIS_STEPS.length - 1) {
-        clearInterval(stepTimerRef.current);
-        setLoadStep(ANALYSIS_STEPS.length - 1);
-      } else {
-        setLoadStep(currentStep);
-      }
-    }, 8000);
-  }
-
-  function stopStepAnimation() {
-    clearInterval(stepTimerRef.current);
-    setLoadStep(0);
-  }
-
-  function handleDrop(e) {
-    e.preventDefault();
-    setDragOver(false);
-    const droppedFile = e.dataTransfer.files[0];
-    if (droppedFile?.name.endsWith(".csv")) setFile(droppedFile);
-  }
 
   const handleStartAnalysis = async () => {
-    setLoading(true);
-    setError(null);
-    startStepAnimation();
+    setIsAnalyzing(true);
+    let payload = null;
+    let url = "http://localhost:5000/api/analyze";
+    let options = { method: "POST" };
+
     try {
-      const formData = new FormData();
-      if (file) {
-        formData.append("file", file);
-      } else if (username) {
-        formData.append("source", "twitter");
-        formData.append("handle", username);
+      if (inputType === "username" || inputType === "url") {
+        if (!inputValue) {
+          alert("Please enter a value.");
+          setIsAnalyzing(false);
+          return;
+        }
+        options.headers = { "Content-Type": "application/json" };
+        payload = JSON.stringify({
+          type: inputType,
+          value: inputValue,
+          sample_size: 50,
+        });
+        options.body = payload;
+      } else if (inputType === "csv" && selectedFile) {
+        const formData = new FormData();
+        formData.append("file", selectedFile);
+        options.body = formData;
       } else {
-        formData.append("source", "sample");
+        alert("Please provide the required input.");
+        setIsAnalyzing(false);
+        return;
       }
 
-      const res = await fetch("http://localhost:5000/api/analyze", {
-        method: "POST",
-        body: formData,
-      });
+      console.log("Starting analysis with payload type:", inputType);
 
-      const data = await res.json();
-      if (res.ok && data.status !== "error") {
+      const response = await fetch(url, options);
+      const data = await response.json();
+
+      if (response.ok) {
+        sessionStorage.setItem("analysisData", JSON.stringify(data));
         navigate("/dashboard");
       } else {
-        setError(data.message || "Analysis failed.");
+        alert(data.error || "Analysis failed.");
+        setIsAnalyzing(false);
       }
-    } catch (err) {
-      console.error(err);
-      setError("Failed to connect to the server.");
-    } finally {
-      stopStepAnimation();
-      setLoading(false);
+    } catch (error) {
+      console.error("Error connecting to backend:", error);
+      alert("Failed to connect to the backend server. Is it running?");
+      setIsAnalyzing(false);
     }
   };
 
+  const recentScans = [
+    { target: "@tech_insider", type: "username", status: "Completed", time: "2m ago" },
+    { target: "trending_dataset.csv", type: "csv", status: "Failed", time: "1hr ago" },
+    { target: "https://twitter.com/elonmusk...", type: "url", status: "Completed", time: "3hrs ago" },
+  ];
+
   return (
-    <div className="min-h-screen bg-white">
-      {/* ── Hero ─────────────────────────────────────────────── */}
-      <section className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 pt-20 pb-24">
-        <div className="grid lg:grid-cols-2 gap-16 items-center">
-          {/* Left */}
-          <div>
-            <h1 className="text-4xl sm:text-5xl font-bold tracking-tight text-gray-900 leading-tight">
-              Detect Viral Trends{" "}
-              <span className="text-indigo-600">Before They Happen</span>
-            </h1>
-            <p className="mt-5 text-lg text-gray-500 leading-relaxed max-w-md">
-              Analyze social media patterns and uncover hidden spikes using
-              intelligent detection.
-            </p>
-            <button
-              onClick={() => {
-                const el = document.getElementById("input-section");
-                el?.scrollIntoView({ behavior: "smooth" });
-              }}
-              className="mt-8 px-6 py-3 text-sm font-semibold text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 transition-colors"
-            >
-              Analyze Now
-            </button>
-          </div>
+    <div className="flex-1 p-6 md:p-10 w-full xl:max-w-6xl mx-auto flex flex-col justify-center min-h-[90vh]">
+      <div className="mb-10 text-center md:text-left">
+        <h1 className="text-3xl lg:text-4xl font-semibold text-zinc-100 tracking-tight drop-shadow-sm">Initialize Sequence</h1>
+        <p className="text-sm font-mono text-zinc-500 mt-3 max-w-2xl">
+          Connect to target data streams. Provide a platform identity, direct URL, or push a local historical dataset to the anomaly engine.
+        </p>
+      </div>
 
-          {/* Right – abstract graph */}
-          <div className="hidden lg:block">
-            <div className="relative">
-              <div className="absolute inset-0 bg-indigo-50 rounded-2xl -rotate-2 scale-105" />
-              <div className="relative bg-white rounded-2xl border border-gray-100 shadow-sm p-6">
-                <svg viewBox="0 0 420 200" fill="none" className="w-full">
-                  {/* Grid */}
-                  {[40, 80, 120, 160].map((y) => (
-                    <line key={y} x1="30" y1={y} x2="400" y2={y} stroke="#f1f5f9" strokeWidth="1" />
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+
+        {/* Left Col: Setup Form */}
+        <div className="col-span-2 space-y-6 relative">
+          <div className="absolute -inset-1 bg-gradient-to-r from-indigo-500/20 to-purple-500/20 blur-xl opacity-30 pointer-events-none rounded-3xl" />
+
+          <div className="glass-panel rounded-2xl p-6 md:p-8 relative">
+            <h2 className="text-[11px] font-semibold text-indigo-400 mb-6 uppercase tracking-[0.2em]">Target Configuration</h2>
+
+            <div className="space-y-6">
+              <div>
+                <label className="block text-xs font-mono text-zinc-400 mb-2">SOURCE_TYPE</label>
+                <div className="flex border border-white/10 rounded-lg overflow-hidden w-fit bg-zinc-950/50 p-1 gap-1">
+                  {["username", "url", "csv"].map((type) => (
+                    <button
+                      key={type}
+                      className={`px-5 py-2 text-xs font-medium rounded-md transition-all duration-200 ${inputType === type
+                        ? "bg-zinc-800 text-zinc-100 shadow-[inset_0_1px_0_rgba(255,255,255,0.1)]"
+                        : "text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/50"
+                        }`}
+                      onClick={() => setInputType(type)}
+                    >
+                      {type === "username" ? "Account" : type === "url" ? "URL" : "File Upload"}
+                    </button>
                   ))}
-                  {/* Area */}
-                  <path
-                    d="M30,160 60,148 90,152 120,140 150,130 180,95 210,110 240,80 270,105 300,65 330,90 360,85 390,70 390,180 30,180Z"
-                    fill="url(#heroArea)"
-                  />
-                  {/* Line */}
-                  <polyline
-                    points="30,160 60,148 90,152 120,140 150,130 180,95 210,110 240,80 270,105 300,65 330,90 360,85 390,70"
-                    stroke="#6366f1"
-                    strokeWidth="2"
-                    fill="none"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                  {/* Anomaly markers */}
-                  <circle cx="240" cy="80" r="5" fill="#ef4444" />
-                  <circle cx="240" cy="80" r="10" fill="none" stroke="#ef4444" strokeWidth="1" opacity="0.4" />
-                  <circle cx="300" cy="65" r="5" fill="#ef4444" />
-                  <circle cx="300" cy="65" r="10" fill="none" stroke="#ef4444" strokeWidth="1" opacity="0.4" />
-                  {/* Normal dots */}
-                  {[[30, 160], [90, 152], [150, 130], [210, 110], [360, 85], [390, 70]].map(([x, y], i) => (
-                    <circle key={i} cx={x} cy={y} r="3" fill="#6366f1" />
-                  ))}
-                  <defs>
-                    <linearGradient id="heroArea" x1="200" y1="60" x2="200" y2="180">
-                      <stop offset="0%" stopColor="#6366f1" stopOpacity="0.08" />
-                      <stop offset="100%" stopColor="#6366f1" stopOpacity="0" />
-                    </linearGradient>
-                  </defs>
-                </svg>
-                <div className="flex items-center gap-4 mt-2 text-xs text-gray-400">
-                  <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-indigo-500" /> Engagement</span>
-                  <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-500" /> Anomaly</span>
                 </div>
               </div>
-            </div>
-          </div>
-        </div>
-      </section>
 
-      {/* ── Input Section ────────────────────────────────────── */}
-      <section id="input-section" className="bg-gray-50 py-20">
-        <div className="max-w-xl mx-auto px-4 sm:px-6">
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-8">
-            <h2 className="text-xl font-semibold text-gray-900 text-center mb-1">
-              Start Your Analysis
-            </h2>
-            <p className="text-sm text-gray-400 text-center mb-8">
-              Upload your dataset or analyze activity instantly
-            </p>
-
-            {/* Username */}
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">
-              Twitter Handle or Tweet URL <span className="text-gray-400 font-normal">(optional)</span>
-            </label>
-            <input
-              type="text"
-              placeholder="e.g. elonmusk OR https://x.com/..."
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              className="w-full px-4 py-2.5 rounded-lg border border-gray-200 text-sm text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 transition-colors"
-            />
-
-            {/* File upload */}
-            <label className="block text-sm font-medium text-gray-700 mt-6 mb-1.5">
-              CSV File
-            </label>
-            <div
-              onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-              onDragLeave={() => setDragOver(false)}
-              onDrop={handleDrop}
-              onClick={() => fileRef.current?.click()}
-              className={`w-full border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors ${dragOver
-                  ? "border-indigo-400 bg-indigo-50/50"
-                  : "border-gray-200 hover:border-gray-300"
-                }`}
-            >
-              <input
-                ref={fileRef}
-                type="file"
-                accept=".csv"
-                className="hidden"
-                onChange={(e) => setFile(e.target.files[0])}
-              />
-              <svg className="w-8 h-8 mx-auto text-gray-300 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
-              </svg>
-              {file ? (
-                <p className="text-sm text-indigo-600 font-medium">{file.name}</p>
-              ) : (
-                <p className="text-sm text-gray-400">
-                  Drag & drop a CSV file here, or <span className="text-indigo-500 font-medium">browse</span>
-                </p>
+              {(inputType === "username" || inputType === "url") && (
+                <div>
+                  <label className="block text-xs font-mono text-zinc-400 mb-2">TARGET_IDENTITY</label>
+                  <input
+                    type="text"
+                    className="w-full bg-zinc-950/50 border border-white/10 rounded-lg px-4 py-3 text-sm text-zinc-100 placeholder-zinc-700 focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/50 transition-colors shadow-[inset_0_2px_4px_rgba(0,0,0,0.2)]"
+                    placeholder={inputType === "username" ? "@username or target ID" : "https://..."}
+                    value={inputValue}
+                    onChange={(e) => setInputValue(e.target.value)}
+                  />
+                </div>
               )}
-            </div>
 
-            {/* Loading progress */}
-            {loading && (
-              <div className="mt-6 rounded-xl border border-indigo-100 bg-indigo-50/60 px-5 py-4">
-                <div className="flex items-center gap-3 mb-3">
-                  <svg className="w-4 h-4 text-indigo-500 animate-spin" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4l3-3-3-3v4a8 8 0 100 16v-4l-3 3 3 3v-4a8 8 0 01-8-8z" />
-                  </svg>
-                  <span className="text-sm font-semibold text-indigo-700">
-                    {ANALYSIS_STEPS[loadStep]?.label}
-                  </span>
-                  <span className="ml-auto text-[10px] text-indigo-400 font-mono">
-                    Step {loadStep + 1}/{ANALYSIS_STEPS.length}
-                  </span>
-                </div>
-                <p className="text-xs text-indigo-500 mb-3">{ANALYSIS_STEPS[loadStep]?.detail}</p>
-                {/* Step dots */}
-                <div className="flex gap-1.5">
-                  {ANALYSIS_STEPS.map((s, i) => (
-                    <div
-                      key={i}
-                      className={`flex-1 h-1 rounded-full transition-all duration-700 ${
-                        i < loadStep
-                          ? "bg-indigo-500"
-                          : i === loadStep
-                            ? "bg-indigo-400 animate-pulse"
-                            : "bg-indigo-100"
-                      }`}
+              {inputType === "csv" && (
+                <div>
+                  <label className="block text-xs font-mono text-zinc-400 mb-2">LOCAL_DATASET</label>
+                  <div className="border border-dashed border-white/10 hover:border-indigo-500/30 rounded-lg px-6 py-10 text-center bg-zinc-950/30 transition-colors shadow-[inset_0_2px_4px_rgba(0,0,0,0.2)]">
+                    <input
+                      type="file"
+                      id="dataset-upload"
+                      accept=".csv"
+                      className="hidden"
+                      onChange={(e) => setSelectedFile(e.target.files[0])}
                     />
-                  ))}
+                    <label htmlFor="dataset-upload" className="cursor-pointer text-sm text-zinc-500 hover:text-zinc-300 transition-colors">
+                      {selectedFile ? (
+                        <span className="font-medium text-indigo-400 flex items-center justify-center gap-2">
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                          {selectedFile.name}
+                        </span>
+                      ) : (
+                        <span className="flex flex-col items-center gap-3">
+                          <svg className="w-6 h-6 text-zinc-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" /></svg>
+                          <span>Upload a CSV file containing <code className="bg-zinc-800/80 px-1.5 py-0.5 rounded text-xs text-zinc-300 border border-white/5 font-mono">timestamp</code> and <code className="bg-zinc-800/80 px-1.5 py-0.5 rounded text-xs text-zinc-300 border border-white/5 font-mono">value</code> cols.</span>
+                        </span>
+                      )}
+                    </label>
+                  </div>
                 </div>
+              )}
+
+              <div className="pt-4 border-t border-white/5">
+                <button
+                  onClick={handleStartAnalysis}
+                  disabled={isAnalyzing || (inputType === "csv" && !selectedFile) || (inputType !== "csv" && !inputValue)}
+                  className="w-full sm:w-auto px-8 py-3 bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-semibold rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-[0_0_15px_rgba(79,70,229,0.3)] hover:shadow-[0_0_25px_rgba(79,70,229,0.5)] border border-indigo-500/50"
+                >
+                  {isAnalyzing ? (
+                    <>
+                      <svg className="animate-spin h-4 w-4 text-white" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                      </svg>
+                      ENGAGING...
+                    </>
+                  ) : (
+                    "LAUNCH SEQUENCE"
+                  )}
+                </button>
               </div>
-            )}
-
-            {error && (
-              <p className="text-sm text-red-600 mt-4 text-center">{error}</p>
-            )}
-
-            <button
-              onClick={handleStartAnalysis}
-              disabled={loading}
-              className={`w-full mt-6 px-6 py-3 text-sm font-semibold text-white rounded-lg transition-colors ${
-                loading ? "bg-indigo-400 cursor-not-allowed" : "bg-indigo-600 hover:bg-indigo-700"
-              }`}
-            >
-              {loading ? "Analyzing..." : "Start Analysis"}
-            </button>
-          </div>
-        </div>
-      </section>
-
-      {/* ── How It Works ─────────────────────────────────────── */}
-      <section className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-24">
-        <h2 className="text-2xl font-bold text-gray-900 text-center mb-14">
-          How It Works
-        </h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 relative">
-          {/* Connector line (desktop only) */}
-          <div className="hidden md:block absolute top-10 left-[calc(16.67%+24px)] right-[calc(16.67%+24px)] h-px bg-gray-200" />
-
-          {STEPS.map(({ step, icon, title, desc }) => (
-            <div key={step} className="text-center relative">
-              <div className="w-14 h-14 mx-auto rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center mb-4 relative z-10">
-                {icon}
-              </div>
-              <span className="inline-block text-xs font-semibold text-indigo-500 uppercase tracking-wider mb-1">
-                Step {step}
-              </span>
-              <h3 className="text-base font-semibold text-gray-900 mb-1">{title}</h3>
-              <p className="text-sm text-gray-500 max-w-xs mx-auto">{desc}</p>
             </div>
-          ))}
-        </div>
-      </section>
-
-      {/* ── Features ─────────────────────────────────────────── */}
-      <section className="bg-gray-50 py-24">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
-          <h2 className="text-2xl font-bold text-gray-900 text-center mb-4">
-            What You Get
-          </h2>
-          <p className="text-sm text-gray-500 text-center mb-14 max-w-md mx-auto">
-            Built for developers and analysts who need clarity in noisy social data.
-          </p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-            {FEATURES.map(({ icon, title, desc }) => (
-              <div
-                key={title}
-                className="bg-white rounded-xl border border-gray-100 p-6 hover:shadow-md hover:border-gray-200 transition-all duration-200"
-              >
-                <div className="w-10 h-10 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center mb-4">
-                  {icon}
-                </div>
-                <h3 className="text-sm font-semibold text-gray-900 mb-1">{title}</h3>
-                <p className="text-sm text-gray-500 leading-relaxed">{desc}</p>
-              </div>
-            ))}
           </div>
         </div>
-      </section>
 
-      {/* ── Footer ───────────────────────────────────────────── */}
-      <footer className="border-t border-gray-100 py-10">
-        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-          <p className="text-sm font-semibold text-gray-900">Trend Anomaly Finder</p>
-          <p className="text-xs text-gray-400 mt-1 max-w-sm mx-auto">
-            AI-powered anomaly detection for social media trends. Built for
-            clarity in noisy data.
-          </p>
-          <p className="text-xs text-gray-300 mt-4">
-            © {new Date().getFullYear()} Trend Anomaly Finder
-          </p>
+        {/* Right Col: Minimal List */}
+        <div className="space-y-6">
+          <div className="glass-panel rounded-2xl p-5 border border-white/5">
+            <h3 className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest mb-4">Scan History</h3>
+            <div className="space-y-1">
+              {recentScans.map((scan, idx) => (
+                <div key={idx} className="group p-3 rounded-lg flex items-center justify-between hover:bg-white/5 cursor-pointer transition-colors border border-transparent hover:border-white/5">
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium text-zinc-300 truncate group-hover:text-amber-100 transition-colors">{scan.target}</p>
+                    <p className="text-[10px] uppercase font-mono text-zinc-600 mt-1">{scan.type}</p>
+                  </div>
+                  <div className="text-right flex flex-col items-end">
+                    <span className={`text-[10px] font-medium inline-block px-1.5 py-0.5 rounded border uppercase tracking-wider ${scan.status === 'Completed' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-red-500/10 text-red-400 border-red-500/20'}`}>
+                      {scan.status}
+                    </span>
+                    <span className="text-xs text-zinc-600 font-mono mt-1.5">{scan.time}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <Link to="/dashboard" className="text-xs text-zinc-500 hover:text-indigo-400 font-mono inline-flex items-center gap-1 mt-4 transition-colors px-3">
+              View all records &rarr;
+            </Link>
+          </div>
+
+          <div className="glass-panel rounded-2xl p-5 border border-white/5 flex items-center justify-between shadow-lg">
+            <div>
+              <h3 className="text-[10px] font-semibold text-zinc-500 uppercase tracking-widest mb-1">Engine Status</h3>
+              <span className="text-xs font-mono text-zinc-400">Main cluster</span>
+            </div>
+            <span className="flex items-center gap-2 font-mono text-emerald-400 text-xs border border-emerald-500/20 bg-emerald-500/10 px-2 py-1 rounded-md glow-emerald">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+              ONLINE
+            </span>
+          </div>
         </div>
-      </footer>
+
+      </div>
     </div>
   );
 }
-
-/* ─── Data ───────────────────────────────────────────────────── */
-
-const STEPS = [
-  {
-    step: 1,
-    icon: (
-      <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
-      </svg>
-    ),
-    title: "Upload Data",
-    desc: "Drop a CSV or enter a username to pull activity.",
-  },
-  {
-    step: 2,
-    icon: (
-      <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M9.75 3.104v5.714a2.25 2.25 0 01-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 014.5 0m0 0v5.714c0 .597.237 1.17.659 1.591L19.8 15.3M14.25 3.104c.251.023.501.05.75.082M19.8 15.3l-1.57.393A9.065 9.065 0 0112 15a9.065 9.065 0 00-6.23.693L5 14.5m14.8.8l1.402 1.402c1.232 1.232.65 3.318-1.067 3.611A48.309 48.309 0 0112 21c-2.773 0-5.491-.235-8.135-.687-1.718-.293-2.3-2.379-1.067-3.61L5 14.5" />
-      </svg>
-    ),
-    title: "Process Patterns",
-    desc: "Our engine runs statistical and ML-based analysis.",
-  },
-  {
-    step: 3,
-    icon: (
-      <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3v11.25A2.25 2.25 0 006 16.5h2.25M3.75 3h-1.5m1.5 0h16.5m0 0h1.5m-1.5 0v11.25A2.25 2.25 0 0118 16.5h-2.25m-7.5 0h7.5m-7.5 0l-1 3m8.5-3l1 3m0 0l.5 1.5m-.5-1.5h-9.5m0 0l-.5 1.5M9 11.25v1.5M12 9v3.75m3-6v6" />
-      </svg>
-    ),
-    title: "View Insights",
-    desc: "See anomalies, spikes, and root-cause breakdowns.",
-  },
-];
-
-const FEATURES = [
-  {
-    icon: (
-      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" />
-      </svg>
-    ),
-    title: "Spike Detection",
-    desc: "Identify sudden surges in engagement using Z-score and IQR-based statistical methods.",
-  },
-  {
-    icon: (
-      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
-      </svg>
-    ),
-    title: "Bot Activity Detection",
-    desc: "Flag suspicious patterns that suggest coordinated inauthentic behavior or automated posting.",
-  },
-  {
-    icon: (
-      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 18L9 11.25l4.306 4.307a11.95 11.95 0 015.814-5.519l2.74-1.22m0 0l-5.94-2.28m5.94 2.28l-2.28 5.941" />
-      </svg>
-    ),
-    title: "Trend Prediction",
-    desc: "Forecast upcoming spikes in activity based on historical patterns and time-series models.",
-  },
-  {
-    icon: (
-      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" />
-      </svg>
-    ),
-    title: "Smart Alerts",
-    desc: "Get notified when anomalies cross severity thresholds so you can respond quickly.",
-  },
-];

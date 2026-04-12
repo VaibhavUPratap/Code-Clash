@@ -2,25 +2,26 @@ import React, { useState, useEffect, useMemo } from "react";
 
 /* ─── Helpers ────────────────────────────────────────────────── */
 
-const SEVERITY_COLORS = {
-  critical: "bg-red-50 text-red-700 border-red-200",
-  medium: "bg-orange-50 text-orange-700 border-orange-200",
-  low: "bg-yellow-50 text-yellow-700 border-yellow-200",
+const SEVERITY_STYLES = {
+  critical: "bg-red-500/10 text-red-400 border border-red-500/20 shadow-[inset_0_0_8px_rgba(239,68,68,0.2)]",
+  medium: "bg-amber-500/10 text-amber-400 border border-amber-500/20 shadow-[inset_0_0_8px_rgba(245,158,11,0.2)]",
+  low: "bg-indigo-500/10 text-indigo-400 border border-indigo-500/20",
 };
 
 const SEVERITY_DOTS = {
-  critical: "bg-red-500",
-  medium: "bg-orange-500",
-  low: "bg-yellow-400",
+  critical: "bg-red-500 glow-red animate-pulse",
+  medium: "bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.5)]",
+  low: "bg-indigo-500 glow-indigo",
 };
 
 function formatDate(isoString) {
   const d = new Date(isoString);
-  // Support both YYYY-MM-DD and true ISO timestamps cleanly
   return d.toLocaleString("en-US", {
     month: "short",
-    day: "numeric",
-    year: "numeric",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false
   });
 }
 
@@ -30,99 +31,71 @@ function AlertRow({ alert }) {
   const [expanded, setExpanded] = useState(false);
 
   return (
-    <div className="border-b border-gray-100 last:border-0 group">
-      {/* Main Row */}
-      <div
+    <>
+      <tr
         onClick={() => setExpanded(!expanded)}
-        className="flex items-center px-6 py-3 cursor-pointer hover:bg-gray-50 transition-colors"
+        className={`border-b border-white/5 cursor-pointer text-xs transition-all duration-200 ${expanded ? "bg-white/5" : "hover:bg-white/5"}`}
       >
-        <div className="w-1/4 min-w-[180px] flex items-center gap-3">
-          <button
-            className="text-gray-400 group-hover:text-gray-600 transition-colors"
-            title={expanded ? "Collapse" : "Expand"}
-          >
-            <svg
-              className={`w-4 h-4 transform transition-transform ${expanded ? "rotate-90" : ""}`}
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={2}
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
-            </svg>
-          </button>
-          <span className="text-sm text-gray-600 font-mono tracking-tight">
+        <td className="py-3 px-5 font-mono text-zinc-400 w-36 border-r border-white/5">
+          <div className="flex items-center gap-3">
+            <span className={`transition-transform duration-200 text-zinc-600 ${expanded ? "rotate-90" : ""}`}>▶</span>
             {formatDate(alert.timestamp)}
-          </span>
-        </div>
-
-        <div className="w-1/6 min-w-[100px]">
-          <span className="text-sm font-medium text-gray-900 capitalize">{alert.metric}</span>
-        </div>
-
-        <div className="w-1/6 min-w-[100px] flex items-center gap-1.5">
-          {alert.type === "spike" ? (
-            <svg className="w-4 h-4 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
-            </svg>
-          ) : (
-            <svg className="w-4 h-4 text-emerald-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M13 17h8m0 0V9m0 8l-8-8-4 4-6-6" />
-            </svg>
-          )}
-          <span className="text-sm text-gray-600 capitalize">{alert.type}</span>
-        </div>
-
-        <div className="w-1/6 min-w-[120px]">
-          <div
-            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border text-xs font-medium capitalize ${SEVERITY_COLORS[alert.severity]}`}
-          >
-            <span className={`w-1.5 h-1.5 rounded-full ${SEVERITY_DOTS[alert.severity]}`} />
-            {alert.severity}
           </div>
-        </div>
-
-        <div className="w-1/6 min-w-[100px] text-right">
-          <span className={`text-sm font-mono ${alert.zScore > 0 ? "text-indigo-600" : "text-emerald-600"}`}>
-            {alert.zScore > 0 ? "+" : ""}{alert.zScore.toFixed(2)}z
-          </span>
-        </div>
-      </div>
+        </td>
+        <td className="py-3 px-5 font-semibold text-zinc-300 border-r border-white/5 uppercase tracking-wider text-[10px]">
+          {alert.metric}
+        </td>
+        <td className="py-3 px-5 text-zinc-500 border-r border-white/5 font-mono text-[11px] uppercase">
+          {alert.type === "spike" ? (
+            <span className="flex items-center gap-1"><svg className="w-3 h-3 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 10l7-7m0 0l7 7m-7-7v18" /></svg> Spike</span>
+          ) : (
+            <span className="flex items-center gap-1"><svg className="w-3 h-3 text-indigo-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" /></svg> Drop</span>
+          )}
+        </td>
+        <td className="py-3 px-5 w-32 border-r border-white/5">
+          <div className="flex items-center gap-2">
+            <span className={`w-1.5 h-1.5 rounded-full ${SEVERITY_DOTS[alert.severity]}`}></span>
+            <span className={`inline-flex px-2 py-0.5 rounded-[4px] text-[9px] font-bold uppercase tracking-widest ${SEVERITY_STYLES[alert.severity]}`}>
+              {alert.severity}
+            </span>
+          </div>
+        </td>
+        <td className={`py-3 px-5 text-right font-mono ${alert.zScore > 0 ? "text-red-400" : "text-indigo-400"}`}>
+          {alert.zScore > 0 ? "+" : ""}{alert.zScore.toFixed(2)}z
+        </td>
+      </tr>
 
       {/* Expanded Details */}
       {expanded && (
-        <div className="px-12 py-4 bg-gray-50 border-t border-gray-100 text-sm">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div>
-              <p className="text-gray-500 font-medium mb-1 text-xs uppercase tracking-wider">Values</p>
-              <p className="text-gray-900 font-mono">
-                Actual: {alert.value.toLocaleString()} <br />
-                Expected Baseline: ~{Math.round(alert.expected).toLocaleString()}
-              </p>
+        <tr className="bg-zinc-900/50 backdrop-blur-sm border-b border-white/5 shadow-inner">
+          <td colSpan={5} className="py-6 px-10 text-xs">
+            <div className="grid grid-cols-3 gap-10">
+              <div className="bg-zinc-950/50 p-4 rounded-xl border border-white/5 shadow-[inset_0_2px_10px_rgba(0,0,0,0.3)]">
+                <p className="text-[9px] font-bold text-indigo-500 uppercase tracking-widest mb-3 border-b border-white/10 pb-2">Metrics Snapshot</p>
+                <div className="grid grid-cols-2 gap-x-4 gap-y-2 font-mono mt-3 text-[11px]">
+                  <span className="text-zinc-500 uppercase">Actual:</span>
+                  <span className="text-zinc-200 text-right font-semibold">{alert.value.toLocaleString()}</span>
+                  <span className="text-zinc-500 uppercase">Expected:</span>
+                  <span className="text-zinc-200 text-right">~{Math.round(alert.expected).toLocaleString()}</span>
+                  <span className="text-zinc-500 uppercase">Duration:</span>
+                  <span className="text-zinc-200 text-right">{alert.duration}</span>
+                </div>
+              </div>
+              <div className="col-span-2">
+                <p className="text-[9px] font-bold text-indigo-500 uppercase tracking-widest mb-3 border-b border-white/10 pb-2">AI Diagnostic Trace</p>
+                <p className="text-zinc-300 leading-relaxed mt-2 font-mono text-[11px] bg-black/40 p-4 rounded-lg border border-white/5 shadow-[inset_0_1px_4px_rgba(0,0,0,0.5)]">
+                  {alert.cause}
+                </p>
+                <div className="mt-4 flex gap-3">
+                  <button className="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-[10px] uppercase font-bold tracking-wider transition-all duration-200 shadow-[0_0_10px_rgba(79,70,229,0.3)]">View Target</button>
+                  <button className="px-5 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-lg text-[10px] uppercase font-bold tracking-wider transition-colors border border-white/5">Acknowledge</button>
+                </div>
+              </div>
             </div>
-            <div>
-              <p className="text-gray-500 font-medium mb-1 text-xs uppercase tracking-wider">Duration</p>
-              <p className="text-gray-900">{alert.duration}</p>
-            </div>
-            <div>
-              <p className="text-gray-500 font-medium mb-1 text-xs uppercase tracking-wider">Automated Analysis</p>
-              <p className="text-gray-900">{alert.cause}</p>
-            </div>
-          </div>
-          <div className="mt-4 pt-3 border-t border-gray-200 flex items-center justify-between">
-            <span className="text-xs text-gray-400 font-mono">ID: {alert.id}</span>
-            <div className="flex gap-3">
-              <button className="text-xs font-medium text-indigo-600 hover:text-indigo-800 transition-colors">
-                View in Graph
-              </button>
-              <button className="text-xs font-medium text-gray-600 hover:text-gray-800 transition-colors">
-                Acknowledge
-              </button>
-            </div>
-          </div>
-        </div>
+          </td>
+        </tr>
       )}
-    </div>
+    </>
   );
 }
 
@@ -142,11 +115,10 @@ export default function AlertsPage() {
           setLoading(false);
           return;
         }
-        
+
         const allAlerts = result.anomalies.map((a, i) => {
-          // Use the backend's pre-computed severity (low / medium / critical)
           const severity = a.severity || (Math.abs(a.z_score) >= 4.5 ? "critical" : Math.abs(a.z_score) >= 3.0 ? "medium" : "low");
-          
+
           return {
             id: `alrt_${a.metric}_${i}_${a.date.replace(/-/g, "")}`,
             timestamp: a.date,
@@ -156,14 +128,12 @@ export default function AlertsPage() {
             zScore: a.z_score,
             value: a.value,
             expected: a.baseline_mean,
-            cause: a.ai_insight ? a.ai_insight.cause : `Automated statistical ${a.type} detection via Z-score analysis.`,
-            duration: "End of day batch", // Simplified since data is daily
+            cause: a.ai_insight ? a.ai_insight.cause : `Automated statistical ${a.type} detection via Z-score manifold analysis.`,
+            duration: "1 Cycle",
           };
         });
-        
-        // Sort newest first
+
         allAlerts.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-        
         setAlerts(allAlerts);
         setLoading(false);
       })
@@ -182,110 +152,60 @@ export default function AlertsPage() {
   }, [onlyCritical, filterType, alerts]);
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-xl font-semibold text-gray-900">System Alerts</h1>
-          <p className="text-sm text-gray-500 mt-1">
-            Monitoring logs and automated detections.
-          </p>
+    <div className="flex-1 p-6 md:p-8 w-full max-w-7xl mx-auto flex flex-col h-screen">
+      {/* Header */}
+      <div className="mb-8 flex flex-col md:flex-row justify-between items-start md:items-end">
+        <div>
+          <h1 className="text-2xl font-semibold text-zinc-100 tracking-tight">Detection Log</h1>
+          <p className="text-[10px] text-zinc-500 mt-2 font-mono uppercase tracking-widest bg-zinc-900/50 px-2 py-1 rounded-sm border border-white/5 inline-block">Total indexed events: {alerts.length}</p>
         </div>
-
-        {/* Controls */}
-        <div className="bg-white border border-gray-200 rounded-t-xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-          {/* Filters */}
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setFilterType("all")}
-              className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
-                filterType === "all"
-                  ? "bg-gray-100 text-gray-900"
-                  : "text-gray-500 hover:bg-gray-50 hover:text-gray-700"
-              }`}
-            >
-              All Types
-            </button>
-            <button
-              onClick={() => setFilterType("spike")}
-              className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
-                filterType === "spike"
-                  ? "bg-indigo-50 text-indigo-700"
-                  : "text-gray-500 hover:bg-gray-50 hover:text-gray-700"
-              }`}
-            >
-              Spikes
-            </button>
-            <button
-              onClick={() => setFilterType("drop")}
-              className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
-                filterType === "drop"
-                  ? "bg-emerald-50 text-emerald-700"
-                  : "text-gray-500 hover:bg-gray-50 hover:text-gray-700"
-              }`}
-            >
-              Drops
-            </button>
-          </div>
-
-          {/* Toggle */}
-          <label className="flex items-center gap-2 cursor-pointer select-none">
-            <div className="relative">
-              <input
-                type="checkbox"
-                className="sr-only"
-                checked={onlyCritical}
-                onChange={(e) => setOnlyCritical(e.target.checked)}
-              />
-              <div
-                className={`block w-10 h-6 rounded-full transition-colors ${
-                  onlyCritical ? "bg-red-500" : "bg-gray-200"
-                }`}
-              />
-              <div
-                className={`absolute left-1 top-1 bg-white w-4 h-4 rounded-full transition-transform ${
-                  onlyCritical ? "translate-x-4" : ""
-                }`}
-              />
-            </div>
-            <span className="text-sm font-medium text-gray-700">Only Critical</span>
+        <div className="mt-6 md:mt-0 flex gap-4 text-xs font-mono">
+          <label className="flex items-center gap-2 cursor-pointer text-zinc-400 hover:text-zinc-200 transition-colors uppercase tracking-widest text-[10px]">
+            <input type="checkbox" checked={onlyCritical} onChange={(e) => setOnlyCritical(e.target.checked)} className="form-checkbox h-3.5 w-3.5 bg-zinc-900 border-white/20 text-indigo-500 rounded-sm focus:ring-indigo-500 focus:ring-offset-zinc-950" />
+            Crit Level Only
           </label>
+          <select
+            className="bg-zinc-900 border border-white/10 px-3 py-1.5 rounded-lg focus:outline-none focus:border-indigo-500/50 text-zinc-300 text-[11px] uppercase tracking-wider"
+            value={filterType}
+            onChange={(e) => setFilterType(e.target.value)}
+          >
+            <option value="all">Global Matrix</option>
+            <option value="spike">Surges (Spike)</option>
+            <option value="drop">Decays (Drop)</option>
+          </select>
         </div>
+      </div>
 
-        {/* Table Header */}
-        <div className="bg-gray-50 border-x border-b border-gray-200 px-6 py-3 flex items-center">
-          <div className="w-1/4 min-w-[180px] text-xs font-semibold text-gray-500 uppercase tracking-wider pl-7">
-            Timestamp
-          </div>
-          <div className="w-1/6 min-w-[100px] text-xs font-semibold text-gray-500 uppercase tracking-wider">
-            Target
-          </div>
-          <div className="w-1/6 min-w-[100px] text-xs font-semibold text-gray-500 uppercase tracking-wider">
-            Type
-          </div>
-          <div className="w-1/6 min-w-[120px] text-xs font-semibold text-gray-500 uppercase tracking-wider">
-            Severity
-          </div>
-          <div className="w-1/6 min-w-[100px] text-xs font-semibold text-gray-500 uppercase tracking-wider text-right">
-            Z-Score
-          </div>
-        </div>
-
-        {/* Alert List */}
-        <div className="bg-white border-x border-b border-gray-200 rounded-b-xl overflow-hidden shadow-sm">
-          {loading ? (
-             <div className="px-6 py-12 text-center text-gray-500 text-sm">
-               Loading system alerts from detection models...
-             </div>
-          ) : filteredAlerts.length === 0 ? (
-            <div className="px-6 py-12 text-center text-gray-500 text-sm">
-              No alerts match the current filters.
-            </div>
-          ) : (
-            filteredAlerts.map((alert) => (
-              <AlertRow key={alert.id} alert={alert} />
-            ))
-          )}
+      {/* Alert Data Grid */}
+      <div className="glass-panel border border-white/5 rounded-2xl shadow-2xl flex-1 flex flex-col min-h-0 overflow-hidden relative">
+        <div className="absolute top-0 right-1/4 w-64 h-64 bg-red-500/5 rounded-full blur-[100px] pointer-events-none" />
+        <div className="overflow-auto flex-1 relative z-10 w-full">
+          <table className="w-full text-left border-collapse min-w-[800px]">
+            <thead className="bg-black/20 border-b border-white/5 backdrop-blur-md sticky top-0 z-20">
+              <tr>
+                <th className="py-3 px-5 text-[9px] font-bold text-zinc-500 uppercase tracking-widest border-r border-white/5">Timestamp</th>
+                <th className="py-3 px-5 text-[9px] font-bold text-zinc-500 uppercase tracking-widest border-r border-white/5">Target Vector</th>
+                <th className="py-3 px-5 text-[9px] font-bold text-zinc-500 uppercase tracking-widest border-r border-white/5">Topology Move</th>
+                <th className="py-3 px-5 text-[9px] font-bold text-zinc-500 uppercase tracking-widest border-r border-white/5">Severity Level</th>
+                <th className="py-3 px-5 text-[9px] font-bold text-zinc-500 uppercase tracking-widest text-right">Z-Score Dev</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-white/5">
+              {loading ? (
+                <tr>
+                  <td colSpan={5} className="py-12 text-center text-xs font-mono text-indigo-400 animate-pulse">Running manifold diagnostics...</td>
+                </tr>
+              ) : filteredAlerts.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="py-12 text-center text-xs font-mono text-zinc-500 italic">No events found in active filter matrix.</td>
+                </tr>
+              ) : (
+                filteredAlerts.map((alert) => (
+                  <AlertRow key={alert.id} alert={alert} />
+                ))
+              )}
+            </tbody>
+          </table>
         </div>
       </div>
     </div>
