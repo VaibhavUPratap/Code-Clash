@@ -231,11 +231,15 @@ export default function PredictionPage() {
                                             <stop offset="0%" stopColor="#6366f1" stopOpacity={0.05} />
                                             <stop offset="100%" stopColor="#6366f1" stopOpacity={0.01} />
                                         </linearGradient>
-                                        <linearGradient id="forecastBand" x1="0" y1="0" x2="0" y2="1">
-                                            <stop offset="0%" stopColor="#ffffff" stopOpacity={0.05} />
-                                            <stop offset="100%" stopColor="#ffffff" stopOpacity={0.0} />
+                                        <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
+                                            <stop offset="5%" stopColor="#6366f1" stopOpacity={0.3} />
+                                            <stop offset="95%" stopColor="#6366f1" stopOpacity={0} />
                                         </linearGradient>
-                                        <filter id="forecastGlow">
+                                        <linearGradient id="forecastBand" x1="0" y1="0" x2="0" y2="1">
+                                            <stop offset="0%" stopColor="#ffffff" stopOpacity={0.03} />
+                                            <stop offset="100%" stopColor="#ffffff" stopOpacity={0.01} />
+                                        </linearGradient>
+                                        <filter id="glow">
                                             <feGaussianBlur stdDeviation="3" result="coloredBlur" />
                                             <feMerge>
                                                 <feMergeNode in="coloredBlur" />
@@ -261,7 +265,7 @@ export default function PredictionPage() {
                                         tickFormatter={v => v >= 1000 ? `${(v / 1000).toFixed(1)}k` : v}
                                     />
 
-                                    <Tooltip content={<ForecastTooltip />} cursor={{ fill: 'rgba(255,255,255,0.02)' }} />
+                                    <Tooltip content={<ForecastTooltip />} cursor={{ stroke: '#52525b', strokeWidth: 1, strokeDasharray: "4 4", fill: 'transparent' }} />
 
                                     {/* Shaded future region */}
                                     {bridgeLabel && lastFutureLabel && (
@@ -274,46 +278,22 @@ export default function PredictionPage() {
                                     )}
 
                                     {/* Confidence interval boundaries */}
-                                    <Area
-                                        type="monotone"
-                                        dataKey="upper_bound"
-                                        stroke="#52525b"
-                                        strokeWidth={1}
-                                        strokeDasharray="4 4"
-                                        fill="none"
-                                        isAnimationActive={false}
-                                    />
-                                    <Area
-                                        type="monotone"
-                                        dataKey="lower_bound"
-                                        stroke="#52525b"
-                                        strokeWidth={1}
-                                        strokeDasharray="4 4"
-                                        fill="none"
-                                        isAnimationActive={false}
-                                    />
+                                    <Area type="monotone" dataKey="upper_bound" stroke="none" fill="url(#forecastBand)" isAnimationActive={false} />
 
-                                    {/* Forecast Band Fill */}
-                                    {bridgeLabel && lastFutureLabel && (
-                                        <Area
-                                            type="monotone"
-                                            dataKey="upper_bound"
-                                            stroke="none"
-                                            fill="url(#forecastBand)"
-                                            isAnimationActive={false}
-                                        />
-                                    )}
-
-                                    {/* Historical line */}
+                                    {/* Historical Actual Line */}
                                     <Line
-                                        type="linear"
+                                        type="monotone"
                                         dataKey="actual"
-                                        stroke="#d4d4d8"
-                                        strokeWidth={1.5}
-                                        dot={{ r: 2, fill: "#a1a1aa", strokeWidth: 0 }}
-                                        activeDot={{ r: 4, fill: "#ffffff", strokeWidth: 0 }}
+                                        stroke="#818cf8"
+                                        strokeWidth={2}
+                                        dot={false}
+                                        activeDot={{ r: 5, fill: "#818cf8", stroke: "#e0e7ff", strokeWidth: 2 }}
+                                        isAnimationActive={false}
+                                        filter="url(#glow)"
                                         connectNulls={false}
                                     />
+                                    {/* Historical Area Fill */}
+                                    <Area type="monotone" dataKey="actual" stroke="none" fill="url(#colorValue)" isAnimationActive={false} />
 
                                     {/* Forecast line */}
                                     <Line
@@ -322,11 +302,14 @@ export default function PredictionPage() {
                                         stroke="#818cf8"
                                         strokeWidth={2}
                                         strokeDasharray="4 4"
-                                        dot={{ r: 3, fill: "#818cf8", strokeWidth: 0 }}
-                                        activeDot={{ r: 5, fill: "#e0e7ff", strokeWidth: 0 }}
+                                        dot={false}
+                                        activeDot={{ r: 5, fill: "#818cf8", stroke: "#e0e7ff", strokeWidth: 2 }}
                                         connectNulls={true}
-                                        filter="url(#forecastGlow)"
+                                        filter="url(#glow)"
+                                        isAnimationActive={false}
                                     />
+                                    {/* Forecast Area Fill */}
+                                    <Area type="monotone" dataKey="predicted" stroke="none" fill="url(#colorValue)" isAnimationActive={false} />
                                 </ComposedChart>
                             </ResponsiveContainer>
                         </div>
