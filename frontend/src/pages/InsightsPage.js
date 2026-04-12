@@ -1,126 +1,234 @@
-import React, { useState, useEffect } from "react";
-import { Info, TrendingUp, TrendingDown } from "lucide-react";
+import React, { useState, useEffect, useRef } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { 
+  Info, 
+  TrendingUp, 
+  TrendingDown, 
+  Microscope, 
+  Activity, 
+  Zap, 
+  Search, 
+  Brain,
+  ShieldAlert,
+  ChevronRight,
+  Sparkles
+} from "lucide-react";
+import { getResults } from "../services/api";
 
+function legacyFromAnomalies(anomalies) {
+  if (!anomalies?.length) return [];
+  return anomalies
+    .filter((a) => a.ai_insight)
+    .map((a, index) => ({
+      kind: "anomaly",
+      id: `ins_${index}`,
+      date: a.date,
+      metric: a.metric,
+      anomaly_type: a.type,
+      severity: a.severity || (Math.abs(a.z_score) > 3 ? "critical" : "medium"),
+      classification: a.ai_insight.type,
+      cause: a.ai_insight.cause,
+      explanation: a.ai_insight.explanation || a.ai_insight.cause,
+      impact: a.ai_insight.impact || "",
+      recommendation: a.ai_insight.recommendation || "",
+      confidence: a.ai_insight.confidence || "low",
+      zScore: a.z_score,
+    }));
+}
+
+/**
+ * Neural Diagnostics — v5.1 (Elite SaaS Edition)
+ * Fixed: Potential render loops by stabilizing effect dependencies.
+ */
 export default function InsightsPage() {
   const [insights, setInsights] = useState([]);
   const [loading, setLoading] = useState(true);
+  const hasFetched = useRef(false);
 
   useEffect(() => {
+    if (hasFetched.current) return;
+    
     const processResult = (result) => {
-      if (result.status !== "ok" || !result.anomalies) {
+      if (result.status !== "ok") {
         setLoading(false);
         return;
       }
-      const validInsights = result.anomalies
-        .filter((a) => a.ai_insight)
-        .map((a, index) => ({
-          id: `ins_${index}`,
-          date: new Date(a.date).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
-          metric: a.metric,
-          type: a.type,
-          causeText: a.ai_insight.cause,
-          recommendation: a.ai_insight.recommendation || "",
-          classification: a.ai_insight.type || "Unknown",
-          confidence: a.ai_insight.confidence || "low",
-          botProbability: a.ai_insight.type === "bot" ? 90 : Math.floor(Math.random() * 30),
-          zScore: a.z_score,
-        }));
-      setInsights(validInsights);
+      if (Array.isArray(result.insights) && result.insights.length > 0) {
+        setInsights(
+          result.insights.map((c, i) => ({ ...c, id: c.id || `card_${i}` }))
+        );
+      } else {
+        setInsights(legacyFromAnomalies(result.anomalies));
+      }
       setLoading(false);
+      hasFetched.current = true;
     };
 
-    // Try sessionStorage first
     const cached = sessionStorage.getItem("analysisData");
     if (cached) {
-      try { processResult(JSON.parse(cached)); return; } catch (e) { /* fall through */ }
+      try { 
+        processResult(JSON.parse(cached)); 
+      } catch (e) { }
     }
 
-    fetch("http://localhost:5000/api/get-results")
-      .then((res) => res.json())
+    getResults()
       .then(processResult)
-      .catch((e) => { console.error("Error fetching insights:", e); setLoading(false); });
-  }, []);
+      .catch(() => setLoading(false));
+      
+  }, []); 
+
+  const fmtDate = (d) => {
+    if (!d) return "Current Cycle";
+    try {
+      return new Date(d).toLocaleDateString("en-US", {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+      }).toUpperCase();
+    } catch { return d; }
+  };
 
   return (
-    <div className="flex-1 p-6 md:p-8 w-full max-w-5xl mx-auto flex flex-col h-screen">
-      <div className="border-b border-white/10 pb-6 mb-8 mt-2">
-        <h1 className="text-2xl font-semibold text-zinc-100 tracking-tight">AI Diagnostics & Trace</h1>
-        <p className="text-[10px] text-zinc-500 mt-2 font-mono uppercase tracking-widest bg-indigo-500/10 px-3 py-1 rounded inline-block border border-indigo-500/20 text-indigo-300">Generated summaries & topological context</p>
-      </div>
-
-      <div className="space-y-6 flex-1 overflow-y-auto pb-10">
-        {loading ? (
-          <p className="text-xs font-mono text-indigo-400 animate-pulse text-center py-10">Initializing neural diagnostic logs...</p>
-        ) : insights.length === 0 ? (
-          <div className="glass-panel p-10 rounded-2xl flex flex-col items-center border border-white/5 bg-zinc-900/30 group cursor-default">
-            <Info className="w-10 h-10 text-zinc-600 mb-4 group-hover:scale-110 group-hover:text-indigo-400 transition-all duration-300" strokeWidth={1.5} />
-            <p className="text-xs font-mono text-zinc-500 italic uppercase transition-colors group-hover:text-zinc-400">No diagnostic logs available in current manifold.</p>
-          </div>
-        ) : (
-          insights.map((insight) => (
-            <div key={insight.id} className="glass-card rounded-xl overflow-hidden flex flex-col md:flex-row group transition-all duration-300 hover:border-white/10">
-
-              {/* Left meta block */}
-              <div className="w-full md:w-56 bg-zinc-950/50 p-5 border-b md:border-b-0 md:border-r border-white/5 flex flex-col gap-3 flex-shrink-0 relative overflow-hidden">
-                {/* Glowing edge effect on hover */}
-                <div className="absolute inset-y-0 left-0 w-1 bg-gradient-to-b from-indigo-500 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
-
-                <span className="text-[10px] uppercase font-bold text-zinc-600 tracking-widest">{insight.date}</span>
-
-                <div className="grid grid-cols-2 lg:grid-cols-1 gap-y-2 mt-2">
-                  <div>
-                    <span className="block text-[9px] font-bold text-zinc-500 uppercase tracking-widest">Target Vector</span>
-                    <span className="text-xs text-zinc-300 font-mono flex items-center gap-1.5 mt-0.5">
-                      {insight.metric}
-                      {insight.type === "spike" ? <TrendingUp className="w-3.5 h-3.5 text-red-500 group-hover:-translate-y-1 group-hover:scale-125 transition-all duration-300" /> : <TrendingDown className="w-3.5 h-3.5 text-indigo-500 group-hover:translate-y-1 group-hover:scale-125 transition-all duration-300" />}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="block text-[9px] font-bold text-zinc-500 uppercase tracking-widest">Significance (z)</span>
-                    <span className={`text-xs font-mono font-bold mt-0.5 ${Math.abs(insight.zScore) > 3 ? "text-red-400" : "text-amber-400"}`}>{Math.abs(insight.zScore).toFixed(1)}</span>
-                  </div>
-                </div>
-
-                <div className="mt-auto pt-5 flex flex-col gap-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[9px] text-zinc-500 uppercase tracking-widest font-semibold">Classification</span>
-                    <span className="text-[9px] font-mono font-bold bg-white/5 border border-white/10 px-2 py-0.5 rounded text-zinc-300 uppercase">{insight.classification}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-[9px] text-zinc-500 uppercase tracking-widest font-semibold">Bot Probability</span>
-                    <span className={`text-[10px] font-mono font-bold ${insight.botProbability > 60 ? "text-red-400" : "text-indigo-400"}`}>{insight.botProbability}%</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Right content block */}
-              <div className="flex-1 p-6 flex flex-col justify-center bg-zinc-900/20 gap-4">
-                <p className="text-xs text-zinc-200 leading-relaxed font-mono bg-black/40 p-4 border border-white/5 rounded-lg shadow-inner">
-                  <span className="text-indigo-500 font-bold mr-2">{'>_'}</span>
-                  {insight.causeText}
-                </p>
-
-                {insight.recommendation && (
-                  <p className="text-xs text-zinc-400 leading-relaxed font-mono bg-emerald-500/5 border border-emerald-500/20 p-4 rounded-lg">
-                    <span className="text-emerald-400 font-bold mr-2">REC:</span>
-                    {insight.recommendation}
-                  </p>
-                )}
-
-                {insight.botProbability > 60 && (
-                  <div className="flex items-center gap-3 bg-red-500/10 border border-red-500/20 text-red-400 text-[10px] uppercase font-bold tracking-widest px-4 py-2.5 rounded-lg w-fit shadow-[inset_0_0_8px_rgba(239,68,68,0.2)] glow-red">
-                    <span className="relative flex h-2.5 w-2.5">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                      <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-red-500"></span>
-                    </span>
-                    High automated activity suspected
-                  </div>
-                )}
-              </div>
+    <div className="flex-1 min-h-screen bg-[#030303] overflow-y-auto px-6 py-12 md:px-12 md:py-20 lg:py-32">
+      <div className="max-w-5xl mx-auto flex flex-col">
+        
+        {/* Header — Forensic Style */}
+        <motion.div 
+            initial={{ opacity: 0, y: 30 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mb-20 border-b border-white/5 pb-12 text-center md:text-left relative"
+        >
+            <div className="absolute top-0 right-0 p-12 opacity-[0.03] pointer-events-none">
+                <Brain className="w-80 h-80" />
             </div>
-          ))
-        )}
+            <h1 className="text-5xl font-black text-white italic uppercase tracking-tighter mb-4 leading-none">Neural Diagnostics</h1>
+            <div className="flex flex-wrap items-center justify-center md:justify-start gap-4 mt-6">
+                <span className="flex items-center gap-3 text-[10px] font-black uppercase tracking-[0.4em] text-indigo-400 bg-indigo-500/10 px-5 py-2.5 rounded-full border border-indigo-500/20 shadow-lg">
+                    <Sparkles className="w-3.4 h-3.4" /> AI Trace Engine Active
+                </span>
+                <span className="text-[10px] font-black uppercase tracking-[0.4em] text-zinc-600">
+                    Determining Causal Variables
+                </span>
+            </div>
+        </motion.div>
+
+        {/* Insights Grid */}
+        <div className="space-y-10 pb-40">
+          {loading ? (
+            <div className="flex flex-col items-center py-40">
+                <div className="w-12 h-12 border-b-2 border-indigo-600 rounded-full animate-spin mb-8" />
+                <p className="text-[10px] font-black uppercase tracking-[0.5em] text-zinc-700 animate-pulse">Synthesizing Neural Logs</p>
+            </div>
+          ) : insights.length === 0 ? (
+            <motion.div 
+                initial={{ opacity: 0 }} 
+                animate={{ opacity: 1 }}
+                className="glass-card rounded-[3rem] p-24 text-center border-dashed border-white/5"
+            >
+              <Info className="w-16 h-16 text-zinc-800 mx-auto mb-6" />
+              <p className="text-zinc-600 text-[10px] font-black uppercase tracking-[0.4em]">No diagnostic trace available in current manifold</p>
+            </motion.div>
+          ) : (
+            <div className="grid grid-cols-1 gap-12">
+              {insights.map((insight, idx) => (
+                <InsightCard key={insight.id} insight={insight} index={idx} fmtDate={fmtDate} />
+              ))}
+            </div>
+          )}
+        </div>
+
       </div>
     </div>
+  );
+}
+
+function InsightCard({ insight, index, fmtDate }) {
+  const isResearch = insight.kind === "research";
+  
+  return (
+    <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: index * 0.1 }}
+        className={`glass-card rounded-[3rem] overflow-hidden border-white/[0.05] relative group transition-all duration-500 hover:border-indigo-500/20 shadow-2xl`}
+    >
+        <div className="flex flex-col md:flex-row h-full">
+            
+            <div className={`w-full md:w-72 p-10 flex flex-col justify-between border-b md:border-b-0 md:border-r border-white/5 relative bg-white/[0.01]`}>
+                <div>
+                    <div className="flex items-center gap-3 mb-6">
+                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${isResearch ? "bg-indigo-500/20 text-indigo-400" : "bg-purple-500/20 text-purple-400"}`}>
+                            {isResearch ? <Microscope className="w-5 h-5" /> : <Zap className="w-5 h-5" />}
+                        </div>
+                        <span className="text-[10px] font-black uppercase tracking-[0.4em] text-zinc-500">
+                           {isResearch ? "Forensics" : "Anomaly"}
+                        </span>
+                    </div>
+
+                    <div className="space-y-6">
+                        <div>
+                            <p className="text-[9px] font-black uppercase tracking-[0.3em] text-zinc-600 mb-2">Timeline</p>
+                            <p className="text-xs font-black text-white font-mono">{fmtDate(insight.date)}</p>
+                        </div>
+                        {!isResearch && (
+                            <div>
+                                <p className="text-[9px] font-black uppercase tracking-[0.3em] text-zinc-600 mb-2">Vector Sensitivity</p>
+                                <div className="flex items-center gap-2">
+                                    <span className={`text-xl font-black font-mono ${insight.severity === 'critical' ? 'text-red-500' : 'text-amber-500'}`}>
+                                        {Math.abs(insight.zScore || 0).toFixed(1)}σ
+                                    </span>
+                                    {insight.anomaly_type === 'spike' ? <TrendingUp className="w-4 h-4 text-red-500" /> : <TrendingDown className="w-4 h-4 text-indigo-500" />}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                <div className="mt-12 pt-8 border-t border-white/5">
+                    <div className="flex items-center justify-between">
+                        <span className="text-[9px] font-bold text-zinc-600 uppercase tracking-widest">Confidence</span>
+                        <span className="text-[10px] font-black text-indigo-500 font-mono uppercase">Full Trace</span>
+                    </div>
+                </div>
+            </div>
+
+            <div className="flex-1 p-10 md:p-14 bg-black/20 flex flex-col justify-between">
+                <div>
+                   <h3 className="text-2xl font-black text-white italic uppercase tracking-tighter mb-8 leading-tight">
+                        {insight.title || (isResearch ? "Research Manifest" : `Spike Detection in ${insight.metric}`)}
+                   </h3>
+                   
+                   <div className="relative mb-10">
+                        <div className="absolute top-0 left-0 w-1 h-full bg-indigo-500/30 rounded-full" />
+                        <div className="pl-8">
+                            <p className="text-lg text-zinc-300 leading-relaxed italic font-medium">
+                                "{insight.summary || insight.cause || insight.explanation}"
+                            </p>
+                        </div>
+                   </div>
+
+                   {insight.impact && (
+                       <div className="mb-8 p-6 bg-red-500/[0.03] border border-red-500/10 rounded-3xl">
+                           <p className="text-xs text-red-400 font-medium leading-relaxed">
+                                <span className="text-[9px] font-black uppercase tracking-widest mr-4 opacity-50 underline decoration-red-500/30 underline-offset-4">Impact Profile</span>
+                                {insight.impact}
+                           </p>
+                       </div>
+                   )}
+                </div>
+
+                <div className="flex items-center justify-between pt-8 border-t border-white/5">
+                    <p className="text-xs text-zinc-500 font-medium italic">
+                        Final Neural Classification: <span className="text-indigo-400 font-bold">{insight.classification || "ANOMALY"}</span>
+                    </p>
+                    <button className="flex items-center gap-3 text-[10px] font-black text-white uppercase tracking-[0.2em] group/btn">
+                        Pivot To Investigation
+                        <ChevronRight className="w-4 h-4 text-indigo-500 group-hover/btn:translate-x-1 transition-transform" />
+                    </button>
+                </div>
+            </div>
+
+        </div>
+    </motion.div>
   );
 }

@@ -6,6 +6,7 @@
     "ajv": "^8.18.0",
     "autoprefixer": "^10.4.27",
     "axios": "^1.7.2",
+    "framer-motion": "^12.38.0",
     "lucide-react": "^1.8.0",
     "plotly.js": "^3.5.0",
     "plotly.js-dist-min": "^2.33.0",

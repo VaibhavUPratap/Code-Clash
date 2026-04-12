@@ -1,0 +1,12 @@
+{
+  "name": "code-clash",
+  "private": true,
+  "workspaces": [
+    "frontend"
+  ],
+  "scripts": {
+    "install:frontend": "npm install --workspace frontend",
+    "start:frontend": "npm run start --workspace frontend",
+    "build:frontend": "npm run build --workspace frontend"
+  }
+}

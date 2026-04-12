@@ -17,7 +17,7 @@ A full-stack hackathon project that analyses social media engagement time-series
 │  /api/analyze  /api/fetch-data  /api/get-results     │
 ├──────────────┬──────────────────┬────────────────────┤
 │ data_service │ detection_service│ ai_agent_service   │
-│ CSV / Twitter│ Z-score / IQR    │ OpenAI / mock      │
+│ CSV / URL+LLM│ Z-score / IQR    │ Gemini / mock      │
 └──────────────┴──────────────────┴────────────────────┘
 ```
 
@@ -52,7 +52,7 @@ npm start
 | Method | Endpoint            | Description                                    |
 |--------|---------------------|------------------------------------------------|
 | GET    | `/api/health`       | Health check                                   |
-| GET    | `/api/fetch-data`   | Return sample data (`?source=twitter&handle=NAME`) |
+| GET    | `/api/fetch-data`   | Return sample data (`?source=twitter&handle=…` uses Gemini synthesis, not X API) |
 | POST   | `/api/fetch-data`   | Upload CSV file                                |
 | POST   | `/api/analyze`      | Run full pipeline (form: `source`, `file`, `handle`) |
 | POST   | `/api/research-link`| Deep URL research (virality + evidence)         |
@@ -111,8 +111,8 @@ Request body:
 ```
 
 Returns URL-level deep research with:
-- platform metrics (for X/Twitter links when API access is available)
-- Google News mention counts (24h and 7d)
+- public page fetch (HTML text + meta) — no Twitter/X API
+- optional Gemini synthesis (virality, topics, risks)
 - virality score (0-100) with breakdown
 - LLM or heuristic verdict (`viral | trending | normal`)
 
@@ -122,9 +122,9 @@ Returns URL-level deep research with:
 
 | Variable              | Default          | Description                          |
 |-----------------------|------------------|--------------------------------------|
-| `OPENAI_API_KEY`      | *(empty)*        | Leave blank to use mock AI responses |
-| `OPENAI_MODEL`        | `gpt-4o-mini`    | OpenAI model                         |
-| `TWITTER_BEARER_TOKEN`| *(empty)*        | Twitter API Bearer Token             |
+| `GEMINI_API_KEY`      | *(empty)*        | Required for LLM URL/post series + deep research; blank uses heuristics/mock series |
+| `GEMINI_MODEL`        | `gemini-1.5-flash` | Gemini model                       |
+| `SECRET_KEY` / `JWT_SECRET` | *(see `.env.example`)* | Auth signing                        |
 | `IQR_MULTIPLIER`      | `1.5`            | IQR fence multiplier                 |
 | `ROLLING_WINDOW`      | `7`              | Days for rolling mean/std            |
 | `SEVERITY_MEDIUM`     | `3.0`            | Z-score threshold for medium         |
@@ -173,7 +173,7 @@ And returns strict JSON:
 }
 ```
 
-When `OPENAI_API_KEY` is not set, a deterministic rule-based mock is used so the system works fully offline.
+When `GEMINI_API_KEY` is not set, a deterministic rule-based mock is used so the system works fully offline.
 
 ---
 
@@ -184,6 +184,6 @@ When `OPENAI_API_KEY` is not set, a deterministic rule-based mock is used so the
 - ✅ Interactive Plotly chart with anomaly markers colour-coded by severity
 - ✅ AI insight panel with cause + recommendation per anomaly
 - ✅ Deep Research page with citations + signal timeline for URL analysis
-- ✅ CSV upload + Twitter live data + bundled sample
+- ✅ CSV upload + post URL (Gemini series) + bundled sample
 - ✅ Clean dark-mode UI with responsive design
-- ✅ Modular backend architecture (swap OpenAI → any LLM in one file)
+- ✅ Modular backend architecture (swap Gemini → any LLM in one file)

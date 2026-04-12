@@ -3,9 +3,10 @@ Detection Service – identifies anomalies in a time-series using
 Z-score (rolling window) and IQR methods.
 """
 
+import math
+
 import numpy as np
 import pandas as pd
-from scipy import stats
 from config import Config
 
 
@@ -35,6 +36,8 @@ def detect_anomalies(df: pd.DataFrame, metric: str = "likes") -> list:
 
 def detect_all_metrics(df: pd.DataFrame) -> list:
     """Run detection across all numeric engagement metrics."""
+    if df is None or len(df) == 0:
+        return []
     metrics = ["likes", "comments", "shares", "posts"]
     all_anomalies = []
     for metric in metrics:
@@ -118,6 +121,16 @@ def _iqr_detection(df: pd.DataFrame, metric: str) -> list:
     return anomalies
 
 
+def _finite_num(x, default: float = 0.0) -> float:
+    try:
+        v = float(x)
+        if math.isnan(v) or math.isinf(v):
+            return default
+        return v
+    except (TypeError, ValueError):
+        return default
+
+
 def _build_anomaly(
     date: str,
     value: float,
@@ -126,9 +139,13 @@ def _build_anomaly(
     method: str,
     prev_mean: float,
 ) -> dict:
+    value = _finite_num(value)
+    z_score = _finite_num(z_score)
+    prev_mean = _finite_num(prev_mean)
     anomaly_type = "spike" if z_score > 0 else "drop"
     severity = _classify_severity(abs(z_score))
     pct_change = ((value - prev_mean) / prev_mean * 100) if prev_mean != 0 else 0.0
+    pct_change = _finite_num(pct_change)
 
     return {
         "date": date,

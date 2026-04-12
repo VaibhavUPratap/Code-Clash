@@ -1,10 +1,11 @@
 """
-Link Research Service
+Link Research Service (link + on-page content + LLM)
 
-Performs URL-level research to estimate whether a post is viral by combining:
-- Platform metrics (currently X/Twitter metrics when available)
-- External mentions from Google News RSS
-- Optional OpenAI synthesis over collected evidence
+Deep research uses only:
+- HTTP fetch of the target URL (HTML metadata and readable text)
+- Optional Gemini synthesis over that material
+
+No Twitter/X API, Google News RSS, or other third-party data APIs.
 """
 
 from __future__ import annotations
@@ -17,74 +18,89 @@ import re
 import urllib.error
 import urllib.parse
 import urllib.request
-import xml.etree.ElementTree as ET
-from datetime import datetime, timedelta, timezone
-from email.utils import parsedate_to_datetime
+from datetime import datetime, timezone
 
 from config import Config
 
-try:
-    import tweepy
-
-    TWEEPY_AVAILABLE = True
-except ImportError:
-    TWEEPY_AVAILABLE = False
-
-try:
-    from openai import OpenAI
-
-    OPENAI_AVAILABLE = True
-except ImportError:
-    OPENAI_AVAILABLE = False
+from services.gemini_service import call_gemini, extract_json_payload, is_gemini_ready
 
 logger = logging.getLogger(__name__)
 
 USER_AGENT = "Mozilla/5.0 (compatible; CodeClashResearchBot/1.0)"
+MAX_HTML_BYTES = 450_000
+MAX_BODY_CHARS = 14_000
 
 
-def research_post_url(url: str) -> dict:
-    """Research a post URL and return a structured virality report."""
+def research_post_url(url: str, anomaly_context: dict | None = None) -> dict:
+    """Research a URL using fetched page content and optional LLM analysis."""
     normalized_url = _normalise_url(url)
     platform = _detect_platform(normalized_url)
 
-    metadata = _fetch_url_metadata(normalized_url)
-    platform_signals = _collect_platform_signals(normalized_url, platform)
+    page = _fetch_page_content(normalized_url)
+    page_signals = _build_page_signals(platform, page)
+    external_signals = _external_signals_placeholder()
 
-    news_query = _build_news_query(normalized_url, metadata)
-    news_signals = _fetch_news_mentions(news_query)
+    virality = _compute_virality_from_page(page_signals, page)
+    heuristic_assessment = _build_heuristic_assessment_page(virality, page_signals, page)
 
-    virality = _compute_virality(platform_signals, news_signals)
-    heuristic_assessment = _build_heuristic_assessment(virality, platform_signals, news_signals)
+    llm_payload = _llm_deep_research(normalized_url, platform, page_signals, page, virality, anomaly_context)
 
-    llm_assessment = _llm_assessment(
-        normalized_url, platform, metadata, platform_signals, news_signals, virality
-    )
+    assessment = heuristic_assessment
+    research_mode = "heuristic"
+    if llm_payload:
+        assessment = llm_payload.get("assessment") or heuristic_assessment
+        if llm_payload.get("virality"):
+            virality = {**virality, **llm_payload["virality"]}
+        research_mode = "gemini"
 
-    sources = []
-    if metadata.get("url"):
-        sources.append({"type": "post", "title": metadata.get("title", "Source post"), "url": metadata["url"]})
-    for article in news_signals.get("articles", [])[:5]:
-        if article.get("url"):
-            sources.append(
-                {
-                    "type": "news",
-                    "title": article.get("title", "News mention"),
-                    "url": article["url"],
-                    "published_at": article.get("published_at"),
-                }
-            )
+    sources = _build_sources(normalized_url, page, assessment)
+
+    fetched_ok = bool(page.get("fetched"))
+    platform_signal_compat = {
+        "available": fetched_ok,
+        "platform": platform,
+        "status": "ok" if fetched_ok else "error",
+        "code": "page_content_only" if fetched_ok else "page_fetch_failed",
+        "reason": "" if fetched_ok else (page.get("reason") or "Could not fetch page content."),
+        "metrics": {},
+        "page_metrics": {
+            "text_chars": page_signals.get("text_chars"),
+            "title_len": page_signals.get("title_len"),
+            "hype_hits": page_signals.get("hype_lexicon_hits"),
+        },
+        "created_at": datetime.now(timezone.utc).isoformat() if fetched_ok else None,
+    }
+    news_signal_compat = {
+        "available": False,
+        "query": "",
+        "mentions_24h": 0,
+        "mentions_7d": 0,
+        "articles": [],
+        "reason": "News/RSS APIs are not used in link-only research mode.",
+    }
 
     return {
         "url": normalized_url,
         "platform": platform,
-        "metadata": metadata,
+        "url_context": _extract_url_context(normalized_url),
+        "metadata": {
+            "url": page.get("url", normalized_url),
+            "title": page.get("title", ""),
+            "description": page.get("description", ""),
+            "content_type": page.get("content_type", ""),
+            "fetched": page.get("fetched", False),
+            "canonical_url": page.get("canonical_url"),
+        },
+        "page_excerpt": (page.get("body_text") or "")[:2000],
         "signals": {
-            "platform": platform_signals,
-            "news": news_signals,
+            "page": page_signals,
+            "external": external_signals,
+            "platform": platform_signal_compat,
+            "news": news_signal_compat,
         },
         "virality": virality,
-        "assessment": llm_assessment or heuristic_assessment,
-        "research_mode": "openai" if llm_assessment else "heuristic",
+        "assessment": assessment,
+        "research_mode": research_mode,
         "sources": sources,
         "generated_at": datetime.now(timezone.utc).isoformat(),
     }
@@ -106,6 +122,41 @@ def _normalise_url(url: str) -> str:
     return urllib.parse.urlunparse(cleaned)
 
 
+def _extract_url_context(url: str) -> dict:
+    """Extracts entity handles, IDs, and nicknames from URLs for AI contextualization."""
+    try:
+        parsed = urllib.parse.urlparse(url)
+        host = parsed.netloc.lower()
+        path = parsed.path.strip("/")
+        parts = path.split("/")
+        
+        context = {"handle": None, "id": None, "type": "page"}
+        
+        if "x.com" in host or "twitter.com" in host:
+            if len(parts) >= 1:
+                context["handle"] = f"@{parts[0]}"
+                context["type"] = "profile"
+            if "status" in parts and len(parts) > parts.index("status") + 1:
+                context["id"] = parts[parts.index("status") + 1]
+                context["type"] = "post"
+        
+        elif "reddit.com" in host:
+            if "r" in parts and len(parts) > parts.index("r") + 1:
+                context["handle"] = f"r/{parts[parts.index('r') + 1]}"
+                context["type"] = "community"
+            if "comments" in parts:
+                context["type"] = "thread"
+                
+        elif "youtube.com" in host or "youtu.be" in host:
+            context["type"] = "video"
+            if "v" in parts: context["id"] = parts[parts.index("v") + 1]
+            elif len(parts) > 0 and "@" in parts[0]: context["handle"] = parts[0]
+            
+        return context
+    except Exception:
+        return {"handle": None, "id": None, "type": "web_page"}
+
+
 def _detect_platform(url: str) -> str:
     host = urllib.parse.urlparse(url).netloc.lower()
     if "x.com" in host or "twitter.com" in host:
@@ -118,10 +169,12 @@ def _detect_platform(url: str) -> str:
         return "instagram"
     if "facebook.com" in host or "fb.watch" in host:
         return "facebook"
+    if "linkedin.com" in host:
+        return "linkedin"
     return "web"
 
 
-def _fetch_url_metadata(url: str) -> dict:
+def _fetch_page_content(url: str) -> dict:
     req = urllib.request.Request(
         url,
         headers={
@@ -131,30 +184,37 @@ def _fetch_url_metadata(url: str) -> dict:
     )
 
     try:
-        with urllib.request.urlopen(req, timeout=8) as response:
+        with urllib.request.urlopen(req, timeout=12) as response:
             content_type = response.headers.get("Content-Type", "")
             charset = response.headers.get_content_charset() or "utf-8"
-            raw = response.read(350000)
+            raw = response.read(MAX_HTML_BYTES)
 
         text = raw.decode(charset, errors="replace")
         title = _extract_title(text)
         description = _extract_description(text)
+        canonical = _extract_canonical(text, url)
+        body_text = _html_to_plain_text(text)
 
         return {
             "url": url,
             "title": title,
             "description": description,
+            "canonical_url": canonical,
             "content_type": content_type,
+            "body_text": body_text,
             "fetched": True,
         }
     except (urllib.error.URLError, TimeoutError, ValueError) as exc:
-        logger.warning("Failed to fetch metadata for %s: %s", url, exc)
+        logger.warning("Failed to fetch page for %s: %s", url, exc)
         return {
             "url": url,
             "title": "",
             "description": "",
+            "canonical_url": None,
+            "content_type": "",
+            "body_text": "",
             "fetched": False,
-            "reason": "Could not fetch page metadata.",
+            "reason": "Could not fetch page content.",
         }
 
 
@@ -172,13 +232,29 @@ def _extract_title(html_text: str) -> str:
 def _extract_description(html_text: str) -> str:
     og_description = _extract_meta_content(html_text, "property", "og:description")
     if og_description:
-        return og_description[:300]
+        return og_description[:400]
 
     description = _extract_meta_content(html_text, "name", "description")
     if description:
-        return description[:300]
+        return description[:400]
 
     return ""
+
+
+def _extract_canonical(html_text: str, fallback: str) -> str | None:
+    href = _extract_link_rel(html_text, "canonical")
+    if href:
+        return href.strip()[:500]
+    og_url = _extract_meta_content(html_text, "property", "og:url")
+    if og_url:
+        return og_url.strip()[:500]
+    return fallback
+
+
+def _extract_link_rel(html_text: str, rel_value: str) -> str:
+    pattern = rf'<link[^>]*rel\s*=\s*["\']{re.escape(rel_value)}["\'][^>]*href\s*=\s*["\']([^"\']+)["\']'
+    match = re.search(pattern, html_text, re.IGNORECASE)
+    return _clean_html_text(match.group(1)) if match else ""
 
 
 def _extract_meta_content(html_text: str, attr: str, attr_value: str) -> str:
@@ -197,333 +273,58 @@ def _clean_html_text(value: str) -> str:
     return text
 
 
-def _collect_platform_signals(url: str, platform: str) -> dict:
-    if platform != "x":
-        return {
-            "available": False,
-            "platform": platform,
-            "status": "info",
-            "code": "unsupported_platform",
-            "reason": "Direct platform metrics are currently implemented for X/Twitter URLs.",
-        }
-
-    tweet_id = _extract_tweet_id(url)
-    if not tweet_id:
-        return {
-            "available": False,
-            "platform": "x",
-            "status": "error",
-            "code": "invalid_tweet_url",
-            "reason": "Could not parse tweet ID from the URL.",
-        }
-
-    if not TWEEPY_AVAILABLE:
-        return {
-            "available": False,
-            "platform": "x",
-            "tweet_id": tweet_id,
-            "status": "degraded",
-            "code": "x_client_unavailable",
-            "reason": "Twitter metrics client unavailable. Install tweepy to enable live metrics.",
-        }
-
-    if not Config.TWITTER_BEARER_TOKEN:
-        return {
-            "available": False,
-            "platform": "x",
-            "tweet_id": tweet_id,
-            "status": "degraded",
-            "code": "x_credentials_missing",
-            "reason": "Twitter credentials unavailable. Add TWITTER_BEARER_TOKEN for live metrics.",
-        }
-
-    client = tweepy.Client(bearer_token=Config.TWITTER_BEARER_TOKEN)
-    try:
-        response = client.get_tweet(
-            id=tweet_id,
-            tweet_fields=["created_at", "public_metrics", "conversation_id"],
-        )
-        if not response or not response.data:
-            return {
-                "available": False,
-                "platform": "x",
-                "tweet_id": tweet_id,
-                "status": "error",
-                "code": "x_tweet_inaccessible",
-                "reason": "Tweet not found or inaccessible from API.",
-            }
-
-        tweet = response.data
-        metrics = tweet.public_metrics or {}
-        conversation_id = getattr(tweet, "conversation_id", None)
-
-        return {
-            "available": True,
-            "platform": "x",
-            "tweet_id": tweet_id,
-            "status": "ok",
-            "created_at": getattr(tweet, "created_at", None).isoformat()
-            if getattr(tweet, "created_at", None)
-            else None,
-            "conversation_id": str(conversation_id) if conversation_id else None,
-            "conversation_posts_7d": _count_conversation_posts(client, conversation_id),
-            "metrics": {
-                "likes": int(metrics.get("like_count", 0)),
-                "comments": int(metrics.get("reply_count", 0)),
-                "shares": int(metrics.get("retweet_count", 0)),
-                "quotes": int(metrics.get("quote_count", 0)),
-                "bookmarks": int(metrics.get("bookmark_count", 0)),
-                "impressions": int(metrics.get("impression_count", 0)),
-            },
-        }
-    except Exception as exc:
-        err_str = str(exc)
-        logger.warning("Twitter metric fetch failed for %s: %s", url, exc)
-        # Detect 402 Payment Required — Twitter API access tier issue
-        if "402" in err_str or "Payment Required" in err_str or "credits" in err_str.lower():
-            reason = (
-                "Twitter API account has no credits / insufficient access tier. "
-                "Upgrade to Basic or Pro at developer.x.com to enable live metrics."
-            )
-            status = "degraded"
-            code = "x_api_tier_limit"
-        elif "401" in err_str or "Unauthorized" in err_str:
-            reason = "Twitter Bearer Token is invalid or expired. Update TWITTER_BEARER_TOKEN in .env."
-            status = "error"
-            code = "x_api_auth_error"
-        elif "403" in err_str or "Forbidden" in err_str:
-            reason = "Twitter API access is forbidden for this endpoint. The Bearer Token may lack required permissions."
-            status = "error"
-            code = "x_api_forbidden"
-        else:
-            reason = f"Twitter API request failed: {err_str[:120]}"
-            status = "error"
-            code = "x_api_request_failed"
-        return {
-            "available": False,
-            "platform": "x",
-            "tweet_id": tweet_id,
-            "status": status,
-            "code": code,
-            "reason": reason,
-        }
+def _html_to_plain_text(html_text: str) -> str:
+    text = re.sub(r"<script[^>]*>.*?</script>", " ", html_text, flags=re.DOTALL | re.IGNORECASE)
+    text = re.sub(r"<style[^>]*>.*?</style>", " ", text, flags=re.DOTALL | re.IGNORECASE)
+    text = re.sub(r"<noscript[^>]*>.*?</noscript>", " ", text, flags=re.DOTALL | re.IGNORECASE)
+    text = re.sub(r"<[^>]+>", " ", text)
+    text = _clean_html_text(text)
+    return text[:MAX_BODY_CHARS]
 
 
-def _extract_tweet_id(url: str) -> str | None:
-    match = re.search(r"status/(\d+)", url)
-    return match.group(1) if match else None
+def _build_page_signals(platform: str, page: dict) -> dict:
+    body = page.get("body_text") or ""
+    title = page.get("title") or ""
+    desc = page.get("description") or ""
+    combined = f"{title} {desc} {body}".lower()
+
+    hype_hits = sum(1 for w in ("breaking", "viral", "exclusive", "urgent", "live", "watch") if w in combined)
+    social_cues = sum(1 for w in ("share", "follow", "subscribe", "like", "comment") if w in combined)
+
+    return {
+        "mode": "page_content",
+        "platform": platform,
+        "fetched": bool(page.get("fetched")),
+        "text_chars": len(body),
+        "title_len": len(title),
+        "description_len": len(desc),
+        "hype_lexicon_hits": hype_hits,
+        "social_cta_hits": social_cues,
+        "status": "ok" if page.get("fetched") else "unavailable",
+    }
 
 
-def _count_conversation_posts(client, conversation_id) -> int | None:
-    if not conversation_id:
-        return None
-
-    try:
-        response = client.search_recent_tweets(
-            query=f"conversation_id:{conversation_id}",
-            max_results=100,
-            tweet_fields=["id"],
-        )
-        if not response or not response.data:
-            return 0
-        return len(response.data)
-    except Exception:
-        return None
+def _external_signals_placeholder() -> dict:
+    return {
+        "available": False,
+        "mode": "none",
+        "note": "External APIs are not used; analysis is limited to the target URL and on-page text.",
+    }
 
 
-def _build_news_query(url: str, metadata: dict) -> str:
-    parsed = urllib.parse.urlparse(url)
-    host = parsed.netloc.lower().replace("www.", "")
-    is_tweet = host in ("x.com", "twitter.com")
+def _compute_virality_from_page(page_signals: dict, page: dict) -> dict:
+    chars = float(page_signals.get("text_chars", 0))
+    hype = float(page_signals.get("hype_lexicon_hits", 0))
+    cta = float(page_signals.get("social_cta_hits", 0))
+    title_len = float(page_signals.get("title_len", 0))
 
-    tokens = []
+    richness = _cap(math.log10(chars + 20.0) * 18.0, 40.0)
+    headline = _cap(min(title_len, 120.0) * 0.22, 18.0)
+    buzz = _cap(hype * 9.0 + cta * 4.0, 28.0)
 
-    # Prefer title-based tokens when we have metadata
-    if metadata.get("title"):
-        title_tokens = re.findall(r"[A-Za-z0-9]{4,}", metadata["title"])
-        tokens.extend(title_tokens[:6])
-
-    if is_tweet:
-        # For X/Twitter URLs, extract the handle from the URL path (e.g. /elonmusk/status/...)
-        # and use that as the primary search token rather than meaningless numeric IDs
-        path_parts = [p for p in parsed.path.strip("/").split("/") if p]
-        # path_parts[0] is the username, path_parts[1] is "status", path_parts[2] is tweet id
-        if path_parts and not path_parts[0].isdigit():
-            handle = path_parts[0]  # e.g. "elonmusk"
-            if not tokens:  # Only use handle if we have no title tokens
-                tokens.insert(0, handle)
-    else:
-        path_tokens = [
-            t
-            for t in re.split(r"[\/_\-]+", parsed.path)
-            if t and not t.isdigit() and len(t) >= 4
-        ]
-        tokens.extend(path_tokens[:4])
-
-    deduped = []
-    seen = set()
-    # For tweets, skip adding the bare domain (x.com) since it's too generic
-    lead_tokens = [] if (is_tweet and not tokens) else []
-    for token in [*lead_tokens, *tokens]:
-        token_norm = token.lower()
-        if token_norm in seen:
-            continue
-        seen.add(token_norm)
-        deduped.append(token)
-
-    if not deduped:
-        return host
-
-    return " ".join(deduped[:8])
-
-
-def _resolve_google_news_url(rss_url: str) -> str:
-    """Follow the Google News RSS redirect to get the real article URL."""
-    if "news.google.com" not in rss_url:
-        return rss_url
-    try:
-        req = urllib.request.Request(
-            rss_url,
-            headers={"User-Agent": USER_AGENT},
-        )
-        # Disable auto-redirect to capture the Location header
-        class _NoRedirect(urllib.request.HTTPRedirectHandler):
-            def redirect_request(self, req, fp, code, msg, headers, newurl):  # noqa: D102
-                return None
-
-        opener = urllib.request.build_opener(_NoRedirect)
-        try:
-            with opener.open(req, timeout=5) as resp:
-                # If no redirect, just return the original
-                return resp.geturl() or rss_url
-        except urllib.error.HTTPError as e:
-            location = e.headers.get("Location", "")
-            if location:
-                return location
-            return rss_url
-    except Exception:
-        return rss_url
-
-
-def _fetch_news_mentions(query: str) -> dict:
-    rss_url = (
-        "https://news.google.com/rss/search?q="
-        + urllib.parse.quote_plus(query)
-        + "&hl=en-US&gl=US&ceid=US:en"
-    )
-
-    req = urllib.request.Request(rss_url, headers={"User-Agent": USER_AGENT})
-
-    try:
-        with urllib.request.urlopen(req, timeout=8) as response:
-            xml_text = response.read(500000).decode("utf-8", errors="replace")
-
-        root = ET.fromstring(xml_text)
-        items = root.findall(".//item")
-
-        now = datetime.now(timezone.utc)
-        mentions_24h = 0
-        mentions_7d = 0
-        articles = []
-
-        for item in items[:20]:
-            title = (item.findtext("title") or "").strip()
-            raw_link = (item.findtext("link") or "").strip()
-            pub_raw = (item.findtext("pubDate") or "").strip()
-            source_tag = item.find("source")
-            source = source_tag.text.strip() if source_tag is not None and source_tag.text else ""
-            # <source url="https://actual-publisher.com"> often carries the real domain
-            source_url = source_tag.get("url", "") if source_tag is not None else ""
-
-            # Try to resolve Google News RSS redirect; fall back to source_url if still an RSS link
-            resolved_link = _resolve_google_news_url(raw_link) if raw_link else raw_link
-            # If resolution didn't change the URL (still news.google.com), use source domain as fallback
-            if "news.google.com" in resolved_link and source_url:
-                link = source_url
-            else:
-                link = resolved_link or raw_link
-
-            published_at = _parse_pub_date(pub_raw)
-            if published_at is not None:
-                age = now - published_at
-                if age <= timedelta(days=1):
-                    mentions_24h += 1
-                if age <= timedelta(days=7):
-                    mentions_7d += 1
-
-            articles.append(
-                {
-                    "title": title,
-                    "url": link,
-                    "source": source,
-                    "source_url": source_url,
-                    "published_at": published_at.isoformat() if published_at else None,
-                }
-            )
-
-        return {
-            "available": True,
-            "query": query,
-            "mentions_24h": mentions_24h,
-            "mentions_7d": mentions_7d,
-            "articles": articles,
-        }
-    except Exception as exc:
-        logger.warning("News research failed for query '%s': %s", query, exc)
-        return {
-            "available": False,
-            "query": query,
-            "mentions_24h": 0,
-            "mentions_7d": 0,
-            "articles": [],
-            "reason": "Could not fetch news mentions.",
-        }
-
-
-def _parse_pub_date(value: str) -> datetime | None:
-    if not value:
-        return None
-
-    try:
-        dt = parsedate_to_datetime(value)
-        if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=timezone.utc)
-        return dt.astimezone(timezone.utc)
-    except (TypeError, ValueError, OverflowError):
-        return None
-
-
-def _compute_virality(platform_signals: dict, news_signals: dict) -> dict:
-    platform_available = bool(platform_signals.get("available"))
-    metrics = platform_signals.get("metrics", {}) if platform_available else {}
-
-    likes = float(metrics.get("likes", 0))
-    comments = float(metrics.get("comments", 0))
-    shares = float(metrics.get("shares", 0))
-    quotes = float(metrics.get("quotes", 0))
-
-    engagement_component = (
-        _cap(math.log10(likes + 1) * 12.0, 34.0)
-        + _cap(math.log10(comments + 1) * 9.0, 20.0)
-        + _cap(math.log10(shares + 1) * 12.0, 25.0)
-        + _cap(math.log10(quotes + 1) * 6.0, 10.0)
-    )
-
-    conversation_posts = platform_signals.get("conversation_posts_7d") if platform_available else 0
-    conversation_component = _cap(float(conversation_posts or 0) * 0.6, 12.0)
-
-    mentions_24h = float(news_signals.get("mentions_24h", 0))
-    mentions_7d = float(news_signals.get("mentions_7d", 0))
-    news_component = _cap(mentions_24h * 2.8 + mentions_7d * 1.8, 28.0)
-
-    if platform_available:
-        score = round(min(100.0, engagement_component + conversation_component + news_component), 1)
-        news_breakdown = news_component
-    else:
-        # External-only mode when live platform metrics are unavailable.
-        external_component = _cap(mentions_24h * 7.0 + mentions_7d * 3.0, 100.0)
-        score = round(external_component, 1)
-        news_breakdown = external_component
+    score = round(min(100.0, richness + headline + buzz), 1)
+    if not page.get("fetched"):
+        score = min(score, 35.0)
 
     if score >= 70:
         label = "viral"
@@ -532,16 +333,16 @@ def _compute_virality(platform_signals: dict, news_signals: dict) -> dict:
     else:
         label = "normal"
 
-    confidence = _derive_confidence(platform_signals, news_signals)
+    confidence = "high" if page.get("fetched") and chars > 800 else "medium" if page.get("fetched") else "low"
 
     return {
         "score": score,
         "label": label,
         "confidence": confidence,
         "breakdown": {
-            "engagement": round(engagement_component, 1),
-            "conversation": round(conversation_component, 1),
-            "news": round(news_breakdown, 1),
+            "content_richness": round(richness, 1),
+            "headline_signal": round(headline, 1),
+            "language_buzz": round(buzz, 1),
         },
     }
 
@@ -550,159 +351,239 @@ def _cap(value: float, maximum: float) -> float:
     return min(maximum, max(0.0, value))
 
 
-def _derive_confidence(platform_signals: dict, news_signals: dict) -> str:
-    evidence_points = 0
-    if platform_signals.get("available"):
-        evidence_points += 1
-    if news_signals.get("available") and news_signals.get("mentions_7d", 0) > 0:
-        evidence_points += 1
-    if news_signals.get("available") and news_signals.get("mentions_24h", 0) >= 3:
-        evidence_points += 1
-    if platform_signals.get("conversation_posts_7d") not in (None, 0):
-        evidence_points += 1
-
-    if evidence_points >= 3:
-        return "high"
-    if evidence_points >= 2:
-        return "medium"
-    return "low"
-
-
-def _build_heuristic_assessment(virality: dict, platform_signals: dict, news_signals: dict) -> dict:
-    score = virality["score"]
+def _build_heuristic_assessment_page(virality: dict, page_signals: dict, page: dict) -> dict:
     label = virality["label"]
-
     reasons = []
-    platform_available = bool(platform_signals.get("available"))
-    metrics = platform_signals.get("metrics", {}) if platform_available else {}
+    key_topics = []
+    risk_signals = []
 
-    if not platform_available:
-        reasons.append("Live platform metrics were unavailable, so external mention signals were weighted more heavily.")
+    if not page.get("fetched"):
+        reasons.append("The page could not be fetched; assessment uses URL and platform heuristics only.")
+        risk_signals.append("Page fetch failed - limited analysis available")
+    else:
+        if page.get("title"):
+            reasons.append("Page title and meta description were parsed from the response.")
+        if page_signals.get("text_chars", 0) > 1500:
+            reasons.append("Substantial visible text suggests a content-heavy page.")
+        if page_signals.get("hype_lexicon_hits", 0) > 0:
+            reasons.append("Language patterns suggest promotional or urgency framing.")
 
-    if metrics.get("likes", 0) >= 100000:
-        reasons.append("High like count indicates broad social reach.")
-    if metrics.get("shares", 0) >= 10000:
-        reasons.append("High share velocity suggests strong redistribution.")
-    if news_signals.get("mentions_24h", 0) > 0:
-        reasons.append("The topic appears in recent news coverage.")
+    # Extract basic topics from title and description
+    title = (page.get("title") or "").lower()
+    description = (page.get("description") or "").lower()
+    combined_text = f"{title} {description}"
+    
+    # Simple topic extraction based on common social media themes
+    topic_keywords = {
+        "ai": ["ai", "artificial intelligence", "machine learning", "gpt", "chatbot"],
+        "tech": ["technology", "software", "app", "startup", "innovation"],
+        "business": ["business", "finance", "economy", "market", "investment"],
+        "social": ["social media", "viral", "trending", "influencer", "content"],
+        "news": ["news", "breaking", "update", "report", "announcement"],
+        "health": ["health", "medical", "wellness", "fitness", "covid"],
+        "entertainment": ["entertainment", "movie", "music", "game", "celebrity"]
+    }
+    
+    for topic, keywords in topic_keywords.items():
+        if any(keyword in combined_text for keyword in keywords):
+            key_topics.append(topic)
+    
+    # Basic risk signal detection
+    if page_signals.get("hype_lexicon_hits", 0) > 3:
+        risk_signals.append("High promotional language density")
+    if page_signals.get("text_chars", 0) < 100:
+        risk_signals.append("Very limited content - potential low-quality source")
+    if not page.get("fetched"):
+        risk_signals.append("Unable to verify content authenticity")
+    
+    # Platform-specific risk signals
+    platform = page_signals.get("platform", "")
+    if platform in ["x", "twitter"]:
+        risk_signals.append("Social media platform - verify source credibility")
+    elif platform == "web":
+        if "bit.ly" in str(page.get("url", "")) or "t.co" in str(page.get("url", "")):
+            risk_signals.append("URL shortener detected - original source unclear")
+
     if not reasons:
-        reasons.append("Current evidence shows limited cross-platform amplification.")
+        reasons.append("Limited on-page signals; treat this as a weak prior.")
 
     if label == "viral":
-        summary = "This post appears viral based on engagement and external mention signals."
+        summary = "Heuristic read: strong on-page signals for attention-grabbing or promotional content."
         actions = [
-            "Monitor engagement every 1-2 hours for momentum shifts.",
-            "Prepare follow-up content while attention remains high.",
+            "Corroborate with independent sources outside this page.",
+            "Capture a snapshot of the page for audit trail.",
+            "Monitor for rapid engagement changes in first 24 hours.",
         ]
     elif label == "trending":
-        summary = "This post appears to be trending but not yet fully viral."
+        summary = "Heuristic read: moderate engagement cues from page copy and structure."
         actions = [
-            "Track shares-to-likes ratio to confirm continued growth.",
-            "Boost distribution with timely follow-up posts.",
+            "Re-fetch later to detect content or metadata changes.",
+            "Compare with sibling URLs from the same author or domain.",
+            "Track cross-platform mentions and shares.",
         ]
     else:
-        summary = "This post currently appears normal with limited virality signals."
+        summary = "Heuristic read: typical content patterns with moderate engagement potential."
         actions = [
-            "Continue monitoring for 24 hours before final judgement.",
-            "Watch for external pickup in news and repost activity.",
+            "Monitor page for changes in engagement metrics over time.",
+            "Analyze content structure and keywords for optimization opportunities.",
+            "Consider A/B testing different headlines or calls-to-action.",
         ]
 
-    if platform_signals.get("platform") == "x" and not platform_available:
-        actions.append("Enable X API Basic/Pro access and set TWITTER_BEARER_TOKEN to restore live platform metrics.")
+    # Add LLM synthesis status
+    if not is_gemini_ready():
+        risk_signals.append("LLM synthesis disabled - set GEMINI_API_KEY environment variable")
 
     return {
         "verdict": label,
         "confidence": virality.get("confidence", "low"),
         "summary": summary,
-        "reasons": reasons[:5],
+        "reasons": reasons[:6],
         "recommended_actions": actions,
-        "score": score,
+        "score": virality["score"],
+        "key_topics": key_topics[:8],
+        "risk_signals": risk_signals[:8],
+        "causal_hypothesis": "Content-driven engagement spike based on heuristic patterns.",
+        "deep_dive": f"Analysis based on {page_signals.get('text_chars', 0)} characters of content with {page_signals.get('hype_lexicon_hits', 0)} promotional indicators.",
     }
 
 
-def _llm_assessment(
+def _llm_deep_research(
     url: str,
     platform: str,
-    metadata: dict,
-    platform_signals: dict,
-    news_signals: dict,
+    page_signals: dict,
+    page: dict,
     virality: dict,
+    anomaly_context: dict | None = None,
 ) -> dict | None:
-    if not OPENAI_AVAILABLE or not Config.OPENAI_API_KEY:
+    if not is_gemini_ready():
         return None
 
+    excerpt = (page.get("body_text") or "")[:9000]
+    ctx = _extract_url_context(url)
+    
     evidence = {
         "url": url,
         "platform": platform,
-        "title": metadata.get("title", ""),
-        "description": metadata.get("description", ""),
-        "platform_signals": platform_signals,
-        "news_mentions": {
-            "query": news_signals.get("query"),
-            "mentions_24h": news_signals.get("mentions_24h"),
-            "mentions_7d": news_signals.get("mentions_7d"),
-        },
-        "virality_score": virality,
+        "url_context": ctx,
+        "anomaly_context": anomaly_context,
+        "title": page.get("title", ""),
+        "description": page.get("description", ""),
+        "page_signals": page_signals,
+        "heuristic_virality": virality,
+        "body_text_excerpt": excerpt,
+        "is_crawl_blocked": not page.get("fetched", False)
     }
 
     prompt = (
-        "You are a digital intelligence analyst.\n"
-        "Decide if the post is viral, trending, or normal using the evidence.\n"
-        "Return strict JSON with keys: verdict, confidence, summary, reasons, recommended_actions.\n"
-        "Rules:\n"
-        "- verdict must be one of viral, trending, normal\n"
-        "- confidence must be low, medium, or high\n"
-        "- reasons must be an array of short strings\n"
-        "- recommended_actions must be an array of practical actions\n\n"
+        "You are a research analyst. The ONLY evidence is the JSON below: a single URL we fetched, "
+        "its metadata, and a plain-text excerpt of the page. No live social metrics or news APIs were used.\n"
+        "Produce a rigorous deep-research style assessment. If data is missing, say so explicitly.\n"
+        "Return STRICT JSON with keys:\n"
+        "- verdict: one of viral, trending, normal (relative to typical social posts/pages, your best estimate)\n"
+        "- confidence: low, medium, or high\n"
+        "- virality_score: number 0-100 (float allowed)\n"
+        "- summary: one tight paragraph\n"
+        "- reasons: array of short strings (evidence-backed)\n"
+        "- recommended_actions: array of practical next steps\n"
+        "- key_topics: array of 3-8 topical tags\n"
+        "- risk_signals: array of strings (misinformation, bot-like patterns, missing context, etc. — empty if none)\n"
+        "- deep_dive: 2-4 sentences expanding implications and what is still unknown\n"
+        "- suggested_followups: array of concrete research tasks (e.g. verify claim X)\n"
+        "- causal_category: one of [milestone, product_launch, breaking_news, controversy, seasonal_events, other]\n"
+        "- causal_hypothesis: one-sentence punchy explanation of WHY this is viral/trending (e.g. 'Highly emotional athlete milestone' or 'Breaking tech controversy')\n\n"
+        "ANALYSIS_MODE: " + ("SYNTHESIS" if not page.get("fetched") else "DIRECT_CRAWL") + "\n"
+        "IF IN SYNTHESIS MODE: Platform policy blocked direct extraction. This is a HIGH PRIORITY SYNTHESIS task. "
+        "The identified entity is: '" + str(ctx.get('handle') or 'this link') + "'. "
+        "Based on your internal world knowledge about this specific account and current global events, provide a BOLD and SPECIFIC hypothesis about the likely cause of this engagement spike. "
+        "Do NOT hedge with 'information is limited' if you recognize the handle; instead, identify the most plausible recent driver (e.g. a legendary milestone for @Cristiano, or a product launch for a tech handle).\n\n"
+        "ANOMALY_CONTEXT: " + (json.dumps(anomaly_context) if anomaly_context else "None provided.") + "\n\n"
         f"Evidence JSON:\n{json.dumps(evidence, ensure_ascii=True)}"
     )
 
     try:
-        client = OpenAI(api_key=Config.OPENAI_API_KEY)
-        response = client.chat.completions.create(
-            model=Config.OPENAI_MODEL,
-            messages=[
-                {
-                    "role": "system",
-                    "content": "You produce concise JSON-only social intelligence reports.",
-                },
-                {"role": "user", "content": prompt},
-            ],
-            temperature=0.1,
-            max_tokens=350,
-            response_format={"type": "json_object"},
+        system_instr = (
+            "You are a senior propaganda and virality research analyst. "
+            "You output JSON only. Never invent off-page facts; "
+            "ground claims in the provided excerpt or metadata. "
+            "Be decisive: if signals point to bot activity or coordinated behavior, say so clearly."
         )
 
-        raw = response.choices[0].message.content or "{}"
+        raw_response = call_gemini(
+            prompt=prompt,
+            system_instruction=system_instr,
+            temperature=0.15,
+            max_tokens=800
+        )
+
+        raw = extract_json_payload(raw_response) or "{}"
         data = json.loads(raw)
 
         verdict = _safe_enum(data.get("verdict"), ["viral", "trending", "normal"], virality["label"])
         confidence = _safe_enum(data.get("confidence"), ["low", "medium", "high"], virality["confidence"])
 
+        try:
+            llm_score = float(data.get("virality_score", virality["score"]))
+        except (TypeError, ValueError):
+            llm_score = virality["score"]
+        llm_score = max(0.0, min(100.0, llm_score))
+
         reasons = data.get("reasons") if isinstance(data.get("reasons"), list) else []
-        reasons = [str(x)[:140] for x in reasons][:5]
+        reasons = [str(x)[:200] for x in reasons][:8]
 
         actions = (
             data.get("recommended_actions")
             if isinstance(data.get("recommended_actions"), list)
             else []
         )
-        actions = [str(x)[:160] for x in actions][:5]
+        actions = [str(x)[:200] for x in actions][:6]
 
-        summary = str(data.get("summary", "")).strip()[:400]
+        followups = (
+            data.get("suggested_followups")
+            if isinstance(data.get("suggested_followups"), list)
+            else []
+        )
+        followups = [str(x)[:200] for x in followups][:6]
+
+        key_topics = data.get("key_topics") if isinstance(data.get("key_topics"), list) else []
+        key_topics = [str(x)[:80] for x in key_topics][:10]
+
+        risk_signals = data.get("risk_signals") if isinstance(data.get("risk_signals"), list) else []
+        risk_signals = [str(x)[:160] for x in risk_signals][:8]
+
+        summary = str(data.get("summary", "")).strip()[:600]
         if not summary:
-            summary = "Evidence reviewed for cross-platform virality signals."
+            summary = "LLM reviewed the on-page excerpt and metadata."
 
-        return {
+        deep_dive = str(data.get("deep_dive", "")).strip()[:1200]
+
+        assessment = {
             "verdict": verdict,
             "confidence": confidence,
             "summary": summary,
             "reasons": reasons,
-            "recommended_actions": actions,
-            "score": virality["score"],
+            "recommended_actions": actions + followups,
+            "score": round(llm_score, 1),
+            "key_topics": key_topics,
+            "risk_signals": risk_signals,
+            "deep_dive": deep_dive,
+            "causal_category": str(data.get("causal_category", "other")).lower(),
+            "causal_hypothesis": str(data.get("causal_hypothesis") or data.get("cause") or "Synthesized causal driver based on platform heuristics.")[:200],
         }
+
+        new_virality = {
+            **virality,
+            "score": round(llm_score, 1),
+            "label": verdict,
+            "confidence": confidence,
+            "breakdown": {
+                **virality.get("breakdown", {}),
+                "llm_adjusted": True,
+            },
+        }
+
+        return {"assessment": assessment, "virality": new_virality}
     except Exception as exc:
-        logger.warning("OpenAI virality synthesis failed: %s", exc)
+        logger.warning("Gemini deep research failed: %s", exc)
         return None
 
 
@@ -710,3 +591,43 @@ def _safe_enum(value, allowed: list, default: str) -> str:
     if isinstance(value, str) and value.lower() in allowed:
         return value.lower()
     return default
+
+
+def fetch_page_for_pipeline(url: str) -> dict:
+    """
+    Fetch public HTML for a URL to give Gemini local context when synthesising
+    engagement time series. Does not call Twitter/X or other social APIs.
+    """
+    try:
+        normalized = _normalise_url(url)
+    except ValueError:
+        return {
+            "url": url,
+            "title": "",
+            "description": "",
+            "body_text": "",
+            "fetched": False,
+            "reason": "Invalid URL.",
+        }
+    return _fetch_page_content(normalized)
+
+
+def _build_sources(url: str, page: dict, _assessment: dict) -> list:
+    primary = page.get("canonical_url") or url
+    title = page.get("title") or "Source page"
+    return [{"type": "page", "title": title, "url": primary}]
+
+
+def _extract_json_payload(text: str) -> str:
+    raw = (text or "").strip()
+    if raw.startswith("```json"):
+        raw = raw[7:]
+    if raw.startswith("```"):
+        raw = raw[3:]
+    if raw.endswith("```"):
+        raw = raw[:-3]
+    raw = raw.strip()
+
+    match = re.search(r"\{.*\}", raw, re.DOTALL)
+    return match.group(0) if match else raw
+

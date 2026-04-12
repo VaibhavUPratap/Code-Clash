@@ -4,5 +4,5 @@ pandas
 numpy
 scipy
 python-dotenv
-openai
-tweepy
+google-genai
+PyJWT

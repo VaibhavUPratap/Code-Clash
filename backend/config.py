@@ -5,10 +5,13 @@ load_dotenv()
 
 
 class Config:
-    OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
-    OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+    # Use long random values in production (JWT_SECRET ≥ 32 bytes recommended for HS256).
+    _DEV_FALLBACK = "codeclash-local-dev-only-change-for-production-min-32!"
+    SECRET_KEY = os.getenv("SECRET_KEY", _DEV_FALLBACK)
+    JWT_SECRET = os.getenv("JWT_SECRET", SECRET_KEY)
 
-    TWITTER_BEARER_TOKEN = os.getenv("TWITTER_BEARER_TOKEN", "")
+    GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+    GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-flash-latest")
 
     # Detection thresholds
     ZSCORE_THRESHOLD = float(os.getenv("ZSCORE_THRESHOLD", "2.5"))

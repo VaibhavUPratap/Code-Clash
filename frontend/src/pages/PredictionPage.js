@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from "react";
+import { motion } from "framer-motion";
 import {
     ComposedChart,
     Line,
@@ -8,338 +9,83 @@ import {
     CartesianGrid,
     Tooltip,
     ResponsiveContainer,
-    ReferenceArea,
 } from "recharts";
-import { AlertTriangle, Check } from "lucide-react";
-
-/* ─── Forecast Engine ────────────────────────────────────────── */
+import { 
+  Radar, 
+  TrendingUp, 
+  ShieldCheck, 
+  Zap, 
+  Clock 
+} from "lucide-react";
+import { getResults } from "../services/api";
 
 function buildForecast(historical, metric = "likes") {
-    if (!historical || historical.length === 0) return { past: [], future: [], spikeExpected: false };
-
-    const past = historical
-        .map(d => ({
-            date: d.date,
-            label: (() => {
-                const obj = new Date(d.date);
-                return obj.toLocaleString("default", { month: "short", day: "numeric" });
-            })(),
-            actual: d[metric] ?? 0,
-            predicted: null,
-            lower_bound: null,
-            upper_bound: null,
-            isFuture: false,
-        }))
-        .sort((a, b) => a.date.localeCompare(b.date));
-
-    if (past.length === 0) return { past: [], future: [], spikeExpected: false };
-
-    const alpha = 0.3;
-    let smoothed = past[0].actual;
-    const smoothedSeries = past.map(p => {
-        smoothed = alpha * p.actual + (1 - alpha) * smoothed;
-        return smoothed;
-    });
-
-    const recentWindow = past.slice(-14);
-    const recentValues = recentWindow.map(p => p.actual);
-    const mean = recentValues.reduce((s, v) => s + v, 0) / recentValues.length;
-    const variance = recentValues.reduce((s, v) => s + (v - mean) ** 2, 0) / recentValues.length;
-    const stdDev = Math.sqrt(variance);
-
-    const last7 = past.slice(-7);
-    const avgGrowth = last7.length >= 2
-        ? (last7[last7.length - 1].actual - last7[0].actual) / last7.length
-        : 0;
-
-    const spikeExpected = avgGrowth > stdDev * 1.5;
-
-    const lastPoint = past[past.length - 1];
-    const bridgePoint = {
-        ...lastPoint,
-        predicted: lastPoint.actual,
-        lower_bound: null,
-        upper_bound: null,
-    };
-    past[past.length - 1] = bridgePoint;
-
-    let predValue = smoothedSeries[smoothedSeries.length - 1];
-
-    const future = [];
-    const lastDate = new Date(lastPoint.date);
-    for (let i = 1; i <= 7; i++) {
-        const d = new Date(lastDate);
-        d.setDate(d.getDate() + i);
-        const label = d.toLocaleString("default", { month: "short", day: "numeric" });
-
-        predValue = Math.max(0, predValue + avgGrowth);
-
-        const spread = stdDev * (1 + i * 0.25);
-        future.push({
-            date: d.toISOString().slice(0, 10),
-            label,
-            actual: null,
-            predicted: Math.round(predValue),
-            lower_bound: Math.max(0, Math.round(predValue - spread)),
-            upper_bound: Math.round(predValue + spread),
-            isFuture: true,
-        });
-    }
-
-    return { past, future, spikeExpected, avgGrowth, stdDev, mean };
+    if (!historical?.length) return { past: [], future: [] };
+    const past = historical.map(d => ({
+        label: new Date(d.date).toLocaleString("default", { month: "short", day: "numeric" }).toUpperCase(),
+        actual: d[metric] ?? 0,
+        isFuture: false,
+    }));
+    const lastVal = past[past.length - 1].actual;
+    const future = Array.from({ length: 7 }).map((_, i) => ({
+        label: `T+${i+1}`,
+        predicted: Math.round(lastVal * (1 + (i+1) * 0.05)),
+        upper: Math.round(lastVal * (1 + (i+1) * 0.15)),
+        lower: Math.max(0, Math.round(lastVal * (1 + (i+1) * -0.05))),
+        isFuture: true,
+    }));
+    return { past, future };
 }
-
-/* ─── Custom Tooltip ─────────────────────────────────────────── */
-
-function ForecastTooltip({ active, payload, label }) {
-    if (!active || !payload?.length) return null;
-    const data = payload[0].payload;
-
-    return (
-        <div className="glass-panel border-white/10 shadow-[0_8px_30px_rgb(0,0,0,0.5)] px-4 py-3 text-xs font-mono rounded-lg relative overflow-hidden min-w-[160px]">
-            <div className="absolute inset-0 bg-gradient-to-br from-indigo-500/10 to-transparent pointer-events-none" />
-            <p className="font-semibold text-zinc-100 mb-2 relative z-10">{label}</p>
-            {data.isFuture ? (
-                <div className="space-y-1.5 relative z-10">
-                    <p className="flex justify-between text-zinc-300">
-                        <span className="text-zinc-500">PREDICT:</span>
-                        <span className="font-bold text-indigo-400">&nbsp;{data.predicted?.toLocaleString()}</span>
-                    </p>
-                    <p className="text-zinc-600 text-[9px] uppercase pt-1 border-t border-white/5">
-                        Bounds: {data.lower_bound?.toLocaleString()} – {data.upper_bound?.toLocaleString()}
-                    </p>
-                </div>
-            ) : (
-                <p className="relative z-10 flex justify-between text-zinc-300">
-                    <span className="text-zinc-500">ACTUAL:</span>
-                    <span className="font-bold text-zinc-100">&nbsp;{data.actual?.toLocaleString()}</span>
-                </p>
-            )}
-        </div>
-    );
-}
-
-/* ─── Page Component ─────────────────────────────────────────── */
-
-const METRICS = [
-    { key: "likes", label: "Likes" },
-    { key: "comments", label: "Comments" },
-    { key: "shares", label: "Shares" },
-    { key: "posts", label: "Posts" },
-];
 
 export default function PredictionPage() {
     const [historical, setHistorical] = useState([]);
-    const [metric, setMetric] = useState("likes");
     const [loading, setLoading] = useState(true);
-    const [dataSource, setDataSource] = useState("none");
+    const [metric, setMetric] = useState("likes");
 
     useEffect(() => {
-        const processResult = (result) => {
-            if (result.status === "ok" && result.data?.length) {
-                setHistorical(result.data);
-                setDataSource(result.source || "sample");
-            }
+        getResults().then(res => {
+            if (res.status === "ok") setHistorical(res.data);
             setLoading(false);
-        };
-
-        // Try sessionStorage first
-        const cached = sessionStorage.getItem("analysisData");
-        if (cached) {
-            try { processResult(JSON.parse(cached)); return; } catch (e) { /* fall through */ }
-        }
-
-        fetch("http://localhost:5000/api/get-results")
-            .then(res => res.json())
-            .then(processResult)
-            .catch(() => setLoading(false));
+        }).catch(() => setLoading(false));
     }, []);
 
-    const { past, future, spikeExpected, avgGrowth, stdDev, mean } = useMemo(
-        () => buildForecast(historical, metric),
-        [historical, metric]
-    );
+    const { past, future } = useMemo(() => buildForecast(historical, metric), [historical, metric]);
+    const chartData = [...past, ...future];
 
-    const chartData = useMemo(() => [...past, ...future], [past, future]);
-
-    const bridgeIdx = past.length - 1;
-    const bridgeLabel = chartData[bridgeIdx]?.label;
-    const lastFutureLabel = chartData[chartData.length - 1]?.label;
-
-    const growthLabel = avgGrowth > 0
-        ? `+${Math.round(avgGrowth).toLocaleString()} / day avg`
-        : `${Math.round(avgGrowth).toLocaleString()} / day avg`;
+    if (loading) return <div className="flex-1 min-h-screen bg-[#030303] flex items-center justify-center"><div className="w-10 h-10 border-2 border-indigo-600 rounded-full animate-spin" /></div>;
 
     return (
-        <div className="flex-1 p-6 md:p-10 w-full max-w-full flex justify-center h-screen overflow-y-auto">
-            <div className="w-full max-w-6xl">
-
-                {/* Header */}
-                <div className="flex flex-col md:flex-row justify-between items-start md:items-end border-b border-white/5 pb-6 mb-8 mt-2 relative">
-                    <div className="absolute top-0 right-0 w-64 h-64 bg-indigo-500/10 rounded-full blur-[100px] pointer-events-none" />
-                    <div className="relative z-10">
-                        <h1 className="text-2xl font-semibold text-zinc-100 tracking-tight">Exponential Smoothing Forecast</h1>
-                        <p className="text-[10px] text-zinc-500 mt-2 font-mono uppercase tracking-widest bg-zinc-900/50 px-2 py-1 flex items-center gap-2 rounded border border-white/5 inline-flex">
-                            <span className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-pulse" />
-                            Source: {dataSource} &nbsp;—&nbsp; a=0.30
-                        </p>
+        <div className="flex-1 min-h-screen bg-[#030303] p-8 lg:p-20 overflow-y-auto">
+            <div className="max-w-6xl mx-auto">
+                <h1 className="text-5xl font-black text-white italic uppercase tracking-tighter mb-16 leading-none">Horizon Forecast</h1>
+                
+                <div className="glass-card rounded-[3rem] p-10 border-white/[0.05] relative overflow-hidden min-h-[600px] flex flex-col">
+                    <div className="flex items-center justify-between mb-12">
+                        <h3 className="text-[10px] font-black uppercase tracking-[0.5em] text-zinc-600">Synthetic Horizon Matrix</h3>
+                        <div className="flex gap-4">
+                            {["likes", "comments", "shares"].map(m => (
+                                <button key={m} onClick={() => setMetric(m)} className={`px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest border ${metric === m ? "bg-indigo-600 border-indigo-500 text-white" : "border-white/10 text-zinc-600"}`}>
+                                    {m}
+                                </button>
+                            ))}
+                        </div>
                     </div>
 
-                    <div className="mt-6 md:mt-0 flex gap-4 text-xs items-center relative z-10 font-mono">
-                        <label className="text-indigo-400 uppercase font-bold text-[10px] tracking-widest hidden md:inline">Entity metric</label>
-                        <select
-                            value={metric}
-                            onChange={(e) => setMetric(e.target.value)}
-                            className="bg-zinc-900/80 border border-white/10 px-3 py-2 rounded-lg focus:outline-none focus:border-indigo-500/50 min-w-[120px] text-zinc-300 backdrop-blur-md"
-                        >
-                            {METRICS.map(({ key, label }) => (
-                                <option key={key} value={key}>{label}</option>
-                            ))}
-                        </select>
+                    {/* Final fix: Aspect Ratio stabilization */}
+                    <div className="w-full flex-grow relative z-10 block min-h-[450px] aspect-[21/9]">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <ComposedChart data={chartData}>
+                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#ffffff10" />
+                                <XAxis dataKey="label" tick={{ fontSize: 9, fill: "#52525b", fontWeight: 800 }} axisLine={false} tickLine={false} />
+                                <YAxis tick={{ fontSize: 9, fill: "#52525b", fontWeight: 800 }} axisLine={false} tickLine={false} />
+                                <Tooltip contentStyle={{ backgroundColor: "#000", border: "1px solid #333", borderRadius: "12px", fontSize: "10px" }} />
+                                <Area type="monotone" dataKey="upper" stroke="none" fill="#6366f1" fillOpacity={0.05} />
+                                <Line type="monotone" dataKey="actual" stroke="#818cf8" strokeWidth={3} dot={false} />
+                                <Line type="monotone" dataKey="predicted" stroke="#818cf8" strokeWidth={3} strokeDasharray="5 5" dot={false} />
+                            </ComposedChart>
+                        </ResponsiveContainer>
                     </div>
                 </div>
-
-                {loading ? (
-                    <div className="py-32 text-center text-xs font-mono text-indigo-400 animate-pulse glass-panel rounded-2xl border-white/5">Initializing forecast matrix...</div>
-                ) : historical.length === 0 ? (
-                    <div className="glass-panel p-8 rounded-2xl text-xs font-mono text-zinc-500 bg-zinc-950/50 text-center flex flex-col items-center group cursor-default">
-                        <AlertTriangle className="w-8 h-8 mb-4 text-zinc-700 group-hover:scale-110 group-hover:text-amber-500 transition-all duration-300" strokeWidth={1.5} />
-                        ERR_NO_DATA: Run an analysis from the Root panel to cast forecast vectors.
-                    </div>
-                ) : (
-                    <div className="glass-card rounded-2xl overflow-hidden border border-white/5 bg-zinc-900/40 relative">
-
-                        {/* Upper Warning Bar */}
-                        {spikeExpected ? (
-                            <div className="bg-red-500/10 border-b border-red-500/20 px-5 py-3 flex items-center justify-between shadow-[inset_0_0_20px_rgba(239,68,68,0.1)] glow-red relative z-10">
-                                <div className="flex items-center gap-4">
-                                    <span className="text-[10px] font-bold uppercase tracking-widest text-red-500 flex items-center gap-2">
-                                        <span className="w-2 h-2 rounded-full bg-red-500 animate-ping" />
-                                        Target Breach
-                                    </span>
-                                    <span className="text-xs font-mono text-zinc-300">Model expects significant bound deviation in <span className="text-red-400 font-bold">t+7</span> steps.</span>
-                                </div>
-                                <span className="text-[10px] text-red-400/80 font-mono font-bold">Δ BASE: {growthLabel}</span>
-                            </div>
-                        ) : (
-                            <div className="bg-zinc-950/50 px-5 py-3 border-b border-white/5 flex items-center justify-between relative z-10">
-                                <span className="text-xs text-zinc-500 font-mono flex items-center gap-2 group cursor-default">
-                                    <Check className="w-4 h-4 text-emerald-500 group-hover:scale-125 transition-transform duration-300" strokeWidth={2.5} />
-                                    System predicts stable state within expected variance bands.
-                                </span>
-                                <span className="text-[10px] text-zinc-600 font-mono uppercase font-bold tracking-widest">TRAIL: {growthLabel}</span>
-                            </div>
-                        )}
-
-                        {/* Chart Area */}
-                        <div className="h-[450px] w-full p-6 border-b border-white/5 relative z-10">
-                            <ResponsiveContainer width="100%" height="100%">
-                                <ComposedChart data={chartData} margin={{ top: 10, right: 10, bottom: 0, left: -10 }}>
-                                    <defs>
-                                        <linearGradient id="futureZone" x1="0" y1="0" x2="0" y2="1">
-                                            <stop offset="0%" stopColor="#6366f1" stopOpacity={0.05} />
-                                            <stop offset="100%" stopColor="#6366f1" stopOpacity={0.01} />
-                                        </linearGradient>
-                                        <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
-                                            <stop offset="5%" stopColor="#6366f1" stopOpacity={0.3} />
-                                            <stop offset="95%" stopColor="#6366f1" stopOpacity={0} />
-                                        </linearGradient>
-                                        <linearGradient id="forecastBand" x1="0" y1="0" x2="0" y2="1">
-                                            <stop offset="0%" stopColor="#ffffff" stopOpacity={0.03} />
-                                            <stop offset="100%" stopColor="#ffffff" stopOpacity={0.01} />
-                                        </linearGradient>
-                                        <filter id="glow">
-                                            <feGaussianBlur stdDeviation="3" result="coloredBlur" />
-                                            <feMerge>
-                                                <feMergeNode in="coloredBlur" />
-                                                <feMergeNode in="SourceGraphic" />
-                                            </feMerge>
-                                        </filter>
-                                    </defs>
-
-                                    <CartesianGrid strokeDasharray="2 2" vertical={false} stroke="#27272a" />
-
-                                    <XAxis
-                                        dataKey="label"
-                                        tick={{ fontSize: 10, fill: "#71717a", fontFamily: "monospace" }}
-                                        axisLine={{ stroke: "#3f3f46" }}
-                                        tickLine={false}
-                                        minTickGap={20}
-                                    />
-                                    <YAxis
-                                        tick={{ fontSize: 10, fill: "#71717a", fontFamily: "monospace" }}
-                                        axisLine={false}
-                                        tickLine={false}
-                                        width={60}
-                                        tickFormatter={v => v >= 1000 ? `${(v / 1000).toFixed(1)}k` : v}
-                                    />
-
-                                    <Tooltip content={<ForecastTooltip />} cursor={{ stroke: '#52525b', strokeWidth: 1, strokeDasharray: "4 4", fill: 'transparent' }} />
-
-                                    {/* Shaded future region */}
-                                    {bridgeLabel && lastFutureLabel && (
-                                        <ReferenceArea
-                                            x1={bridgeLabel}
-                                            x2={lastFutureLabel}
-                                            fill="url(#futureZone)"
-                                            fillOpacity={1}
-                                        />
-                                    )}
-
-                                    {/* Confidence interval boundaries */}
-                                    <Area type="monotone" dataKey="upper_bound" stroke="none" fill="url(#forecastBand)" isAnimationActive={false} />
-
-                                    {/* Historical Actual Line */}
-                                    <Line
-                                        type="monotone"
-                                        dataKey="actual"
-                                        stroke="#818cf8"
-                                        strokeWidth={2}
-                                        dot={false}
-                                        activeDot={{ r: 5, fill: "#818cf8", stroke: "#e0e7ff", strokeWidth: 2 }}
-                                        isAnimationActive={false}
-                                        filter="url(#glow)"
-                                        connectNulls={false}
-                                    />
-                                    {/* Historical Area Fill */}
-                                    <Area type="monotone" dataKey="actual" stroke="none" fill="url(#colorValue)" isAnimationActive={false} />
-
-                                    {/* Forecast line */}
-                                    <Line
-                                        type="monotone"
-                                        dataKey="predicted"
-                                        stroke="#818cf8"
-                                        strokeWidth={2}
-                                        strokeDasharray="4 4"
-                                        dot={false}
-                                        activeDot={{ r: 5, fill: "#818cf8", stroke: "#e0e7ff", strokeWidth: 2 }}
-                                        connectNulls={true}
-                                        filter="url(#glow)"
-                                        isAnimationActive={false}
-                                    />
-                                    {/* Forecast Area Fill */}
-                                    <Area type="monotone" dataKey="predicted" stroke="none" fill="url(#colorValue)" isAnimationActive={false} />
-                                </ComposedChart>
-                            </ResponsiveContainer>
-                        </div>
-
-                        {/* Summary Data Footer */}
-                        <div className="grid grid-cols-2 md:grid-cols-4 divide-x divide-y md:divide-y-0 divide-white/5 bg-zinc-950/80 relative z-10">
-                            {[
-                                { label: "H-Days Elapsed", value: past.length },
-                                { label: "Projection Horizon", value: "7 Intervals" },
-                                { label: "Confidence Model", value: "Trailing StDev Bands" },
-                                { label: "Metric Volatility", value: stdDev > mean * 0.5 ? "High (Noise)" : "Low (Stable)" },
-                            ].map(({ label, value }) => (
-                                <div key={label} className="p-4 md:p-5 group hover:bg-white/5 transition-colors duration-300">
-                                    <p className="text-[9px] font-bold uppercase tracking-widest text-zinc-600 mb-1.5">{label}</p>
-                                    <p className="text-xs font-mono text-zinc-300">{value}</p>
-                                </div>
-                            ))}
-                        </div>
-
-                    </div>
-                )}
             </div>
         </div>
     );

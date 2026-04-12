@@ -48,7 +48,7 @@ export default function AnomalyCard({ anomaly }) {
       </div>
 
       {/* AI insight */}
-      {insight.cause && (
+          {insight.cause && (
         <div className="ac-insight">
           <div className="ac-insight-title">
             🤖 AI Insight{" "}
@@ -57,6 +57,12 @@ export default function AnomalyCard({ anomaly }) {
             </span>
           </div>
           <p className="ac-cause">{insight.cause}</p>
+          {insight.explanation && insight.explanation !== insight.cause && (
+            <p className="ac-cause" style={{ opacity: 0.9, fontSize: "0.9em" }}>{insight.explanation}</p>
+          )}
+          {insight.impact && (
+            <p className="ac-cause" style={{ borderLeft: "3px solid #f59e0b", paddingLeft: 8 }}>Impact: {insight.impact}</p>
+          )}
           {insight.recommendation && (
             <p className="ac-rec">💡 {insight.recommendation}</p>
           )}
