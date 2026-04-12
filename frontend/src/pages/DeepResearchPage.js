@@ -145,8 +145,8 @@ export default function DeepResearchPage() {
   const isSynthesized = !report?.metadata?.fetched || report?.research_mode === 'gemini';
 
   return (
-    <div className="flex-1 min-h-screen bg-[#030303] text-zinc-100 font-sans selection:bg-indigo-500/30 overflow-y-auto pb-40">
-      <div className="max-w-7xl mx-auto px-6 py-12 lg:py-24">
+    <div className="flex-1 min-h-full bg-[#030303] text-zinc-100 font-sans selection:bg-indigo-500/30">
+      <div className="max-w-7xl mx-auto px-8 md:px-16 py-12 lg:py-24">
         
         <motion.header 
           initial={{ opacity: 0, y: 30 }}
@@ -181,12 +181,12 @@ export default function DeepResearchPage() {
           )}
         </motion.header>
 
-        <div className="relative mb-24 max-w-5xl mx-auto">
-          <div className="absolute -inset-1 bg-gradient-to-r from-indigo-500/20 to-purple-500/20 rounded-[3rem] blur-3xl opacity-20 pointer-events-none"></div>
+        <div className="relative mb-24 max-w-4xl mx-auto">
+          <div className="absolute -inset-1 bg-gradient-to-r from-indigo-500/10 to-purple-500/10 rounded-[3rem] blur-3xl opacity-20 pointer-events-none"></div>
           <motion.div 
             initial={{ opacity: 0, scale: 0.98 }}
             animate={{ opacity: 1, scale: 1 }}
-            className="p-3 bg-white/[0.02] backdrop-blur-3xl border border-white/[0.08] rounded-[3rem] shadow-2xl flex flex-col lg:flex-row gap-4"
+            className="p-2.5 bg-white/[0.02] backdrop-blur-3xl border border-white/[0.08] rounded-[2.5rem] shadow-2xl flex flex-col lg:flex-row gap-2.5"
           >
             <div className="relative flex-1">
               <div className="absolute inset-y-0 left-8 flex items-center pointer-events-none">
@@ -256,10 +256,10 @@ export default function DeepResearchPage() {
                 key="results"
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
-                className={`space-y-12 transition-all duration-1000 ${loading ? "opacity-20 blur-2xl scale-[0.98]" : "opacity-100 blur-0 scale-100"}`}
+                className={`space-y-10 transition-all duration-700 ${loading ? "opacity-20 blur-xl scale-[0.99]" : "opacity-100"}`}
             >
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-12">
-                <div className="lg:col-span-2 p-12 md:p-16 glass-card rounded-[4rem] border-white/[0.05] relative overflow-hidden group">
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
+                <div className="lg:col-span-2 p-12 md:p-14 glass-card rounded-[3rem] border-white/[0.05] relative overflow-hidden group">
                     <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-indigo-500/30 to-transparent"></div>
                     <div className="absolute top-0 right-0 p-16 opacity-[0.03] group-hover:opacity-[0.06] transition-opacity duration-1000 pointer-events-none">
                         <Brain className="w-[500px] h-[500px]" />

@@ -6,6 +6,9 @@
   html {
     scroll-behavior: smooth;
     cursor: default;
+    /* 144hz Optimization: Ensure standard frame budget */
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
 
   body {
@@ -19,7 +22,7 @@
     @apply text-white tracking-tight font-bold;
   }
 
-  /* Custom Webkit Scrollbars */
+  /* Custom Webkit Scrollbars (GPU Threaded) */
   ::-webkit-scrollbar {
     width: 6px;
     height: 6px;
@@ -35,81 +38,50 @@
 }
 
 @layer utilities {
+  /* GPU-Accelerated Base Layers (144hz Optimized) */
+  .gpu-accelerated {
+    transform: translateZ(0);
+    backface-visibility: hidden;
+    perspective: 1000px;
+    will-change: transform, opacity;
+  }
+
   /* Elite Glassmorphism */
   .glass-panel {
     @apply bg-zinc-900/40 backdrop-blur-2xl border border-white/[0.08];
+    @extend .gpu-accelerated;
   }
 
   .glass-card {
     @apply bg-[#0f0f13]/60 backdrop-blur-xl border border-white/[0.05] shadow-[0_8px_32px_rgba(0,0,0,0.5)];
+    @extend .gpu-accelerated;
   }
 
   .glass-card-hover {
-    @apply transition-all duration-500 hover:bg-[#14141a]/80 hover:border-white/[0.12] hover:shadow-[0_20px_50px_rgba(0,0,0,0.6)] hover:-translate-y-1;
+    @apply transition-all duration-300 hover:bg-[#14141a]/80 hover:border-white/[0.12] hover:shadow-[0_20px_50px_rgba(0,0,0,0.6)] hover:-translate-y-1;
+    will-change: transform, box-shadow, border-color;
   }
 
-  /* Neon Glow System */
+  /* Neon Glow System (Hardware Optimized) */
   .glow-indigo { box-shadow: 0 0 25px rgba(99, 102, 241, 0.15); }
   .glow-purple { box-shadow: 0 0 25px rgba(168, 85, 247, 0.15); }
   .glow-red { box-shadow: 0 0 30px rgba(239, 68, 68, 0.2); }
   .glow-emerald { box-shadow: 0 0 25px rgba(16, 185, 129, 0.15); }
-  .glow-amber { box-shadow: 0 0 25px rgba(245, 158, 11, 0.15); }
-
-  /* Gradient Borders (Elite Touch) */
-  .border-gradient-indigo {
-    position: relative;
-    border: 1px solid transparent;
-    background-clip: padding-box;
-  }
-  .border-gradient-indigo::before {
-    content: "";
-    position: absolute;
-    top: -1px; bottom: -1px; left: -1px; right: -1px;
-    background: linear-gradient(to right, rgba(99, 102, 241, 0.4), rgba(168, 85, 247, 0.4));
-    border-radius: inherit;
-    z-index: -1;
-    pointer-events: none;
-    opacity: 0.5;
+  
+  /* Layout Consistency Gutter */
+  .platform-gutter {
+    @apply px-6 md:px-12 lg:px-20;
   }
 
-  /* Background Utilities */
-  .bg-grid-white {
-    background-image: radial-gradient(rgba(255, 255, 255, 0.05) 1px, transparent 0);
-    background-size: 32px 32px;
-  }
-
-  /* Animations */
-  .animate-float {
-    animation: float 6s ease-in-out infinite;
-  }
-
-  @keyframes float {
-    0%, 100% { transform: translateY(0); }
-    50% { transform: translateY(-12px); }
-  }
-
-  .animate-pulse-subtle {
-    animation: pulse-subtle 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-  }
-
-  @keyframes pulse-subtle {
-    0%, 100% { opacity: 1; filter: brightness(1); }
-    50% { opacity: 0.8; filter: brightness(1.2); }
-  }
-
-  .text-glow-indigo {
-    text-shadow: 0 0 12px rgba(99, 102, 241, 0.5);
-  }
-
-  /* GPU-optimized layers */
-  .gpu-layer {
-    transform: translateZ(0);
-    will-change: transform, opacity;
+  /* GPU-optimized layers for Recharts */
+  .chart-container-gpu {
+    @extend .gpu-accelerated;
+    contain: layout size;
   }
 }
 
-/* Page Transitions */
+/* Page Transitions (Interpolation optimized for high refresh rates) */
 .page-fade-enter { opacity: 0; transform: translateY(8px); }
-.page-fade-enter-active { opacity: 1; transform: translateY(0); transition: all 400ms ease-out; }
+.page-fade-enter-active { opacity: 1; transform: translateY(0); transition: all 300ms cubic-bezier(0.23, 1, 0.32, 1); }
 .page-fade-exit { opacity: 1; }
-.page-fade-exit-active { opacity: 0; transform: translateY(-8px); transition: all 300ms ease-in; }
+.page-fade-exit-active { opacity: 0; transform: translateY(-8px); transition: all 250ms cubic-bezier(0.23, 1, 0.32, 1); }

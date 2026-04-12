@@ -6,13 +6,12 @@ import {
   LayoutDashboard, 
   Bell, 
   BarChart2, 
-  Cpu, 
   LogOut, 
   Terminal, 
   Zap,
-  Activity,
+  Cpu,
   Layers,
-  ChevronRight
+  Fingerprint
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
 
@@ -25,6 +24,10 @@ const NAV_ITEMS = [
     { to: "/prediction", label: "Horizon", icon: Cpu },
 ];
 
+/**
+ * AppLayout — v6.0 (High Precision Alignment & 144Hz Transitions)
+ * Optimized sidebar and HW-accelerated page transitions.
+ */
 export default function AppLayout() {
     const location = useLocation();
     const navigate = useNavigate();
@@ -36,56 +39,56 @@ export default function AppLayout() {
     };
 
     return (
-        <div className="flex min-h-screen bg-[#030303] text-zinc-400 font-sans selection:bg-indigo-500/30 overflow-hidden">
-            {/* Elite Background Infrastructure */}
+        <div className="flex h-screen bg-[#030303] text-zinc-400 font-sans selection:bg-indigo-500/30 overflow-hidden gpu-accelerated">
+            
+            {/* HW-Accelerated Background Ambience */}
             <div className="fixed inset-0 pointer-events-none z-0">
-                <div className="absolute inset-0 bg-grid-white opacity-[0.03]"></div>
-                <div className="absolute top-0 left-1/4 w-[500px] h-[500px] bg-indigo-600/10 rounded-full blur-[120px] animate-pulse-subtle"></div>
-                <div className="absolute bottom-0 right-1/4 w-[400px] h-[400px] bg-purple-600/5 rounded-full blur-[100px]"></div>
+                <div className="absolute inset-0 bg-grid-white opacity-[0.02]"></div>
+                <div className="absolute top-0 left-1/4 w-[40vw] h-[40vw] bg-indigo-600/5 rounded-full blur-[140px] animate-pulse-subtle"></div>
             </div>
 
-            {/* Sidebar Navigation — Elite Design */}
-            <nav className="w-72 border-r border-white/5 glass-panel hidden md:flex flex-col sticky top-0 h-screen z-20 shadow-2xl relative">
-                <div className="p-8 pb-10 flex items-center gap-4 transition-all hover:translate-x-1">
-                    <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 to-purple-600 flex items-center justify-center shadow-[0_0_20px_rgba(99,102,241,0.4)] group">
-                        <Terminal className="w-5 h-5 text-white group-hover:rotate-12 transition-transform" />
+            {/* Sidebar Navigation — Precision Alignment */}
+            <nav className="w-72 border-r border-white/5 glass-panel hidden lg:flex flex-col h-full z-20 shadow-2xl relative shrink-0">
+                <div className="p-10 pb-12 flex items-center gap-5">
+                    <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-indigo-600 to-purple-600 flex items-center justify-center shadow-[0_0_30px_rgba(79,70,229,0.3)] group shrink-0">
+                        <Terminal className="w-6 h-6 text-white group-hover:rotate-12 transition-transform duration-500" />
                     </div>
-                   <div className="flex flex-col">
-                        <span className="font-black text-xs tracking-[0.2em] text-white uppercase italic">TrendFinder</span>
-                        <span className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest mt-0.5">Crisis Intel OS</span>
+                   <div className="flex flex-col min-w-0">
+                        <span className="font-black text-sm tracking-[0.2em] text-white uppercase italic truncate">Crisis Intel</span>
+                        <span className="text-[10px] font-bold text-zinc-600 uppercase tracking-widest mt-1">v6.0.4 - ACTIVE</span>
                    </div>
                 </div>
 
-                <div className="flex-1 px-4 flex flex-col gap-2 overflow-y-auto">
-                    <div className="text-[10px] font-black text-zinc-600 uppercase tracking-[0.3em] mb-4 px-4 flex items-center gap-2">
-                        <Layers className="w-3 h-3 text-indigo-500/50" />
+                <div className="flex-1 px-5 flex flex-col gap-2.5 overflow-y-auto scrollbar-hide py-4">
+                    <div className="text-[9px] font-black text-zinc-700 uppercase tracking-[0.4em] mb-4 px-6 flex items-center gap-3">
+                        <Layers className="w-3 h-3 opacity-30" />
                         Infrastructure
                     </div>
-                    {NAV_ITEMS.map((item, idx) => {
+                    {NAV_ITEMS.map((item) => {
                         const isActive = location.pathname === item.to;
                         return (
                             <NavLink
                                 key={item.to}
                                 to={item.to}
                                 className={({ isActive }) => `
-                                    group flex items-center justify-between px-4 py-3.5 rounded-2xl text-sm transition-all duration-300 relative overflow-hidden
+                                    group flex items-center justify-between px-5 py-4 rounded-[1.5rem] transition-all duration-300 relative
                                     ${isActive 
-                                        ? "bg-white/[0.03] text-white border border-white/5 shadow-[0_4px_20px_rgba(0,0,0,0.4)]" 
-                                        : "text-zinc-500 hover:text-zinc-200 hover:bg-white/[0.01] border border-transparent"}
+                                        ? "bg-white/[0.04] text-white border border-white/5 shadow-2xl" 
+                                        : "text-zinc-500 hover:text-zinc-200 hover:bg-white/[0.02]"}
                                 `}
                             >
-                                <div className="flex items-center gap-4 relative z-10">
-                                    <div className={`p-2 rounded-xl transition-all duration-300 ${isActive ? "bg-indigo-600/20 text-indigo-400" : "bg-zinc-800/10 text-zinc-600 group-hover:text-zinc-400"}`}>
+                                <div className="flex items-center gap-5 relative z-10 w-full">
+                                    <div className={`p-2.5 rounded-xl transition-all duration-300 ${isActive ? "bg-indigo-600/30 text-indigo-400" : "bg-white/[0.03] text-zinc-600 group-hover:text-zinc-400"}`}>
                                         <item.icon className="w-4 h-4" />
                                     </div>
-                                    <span className={`font-bold tracking-tight ${isActive ? "text-white" : "group-hover:translate-x-1 transition-transform"}`}>
+                                    <span className={`text-[12px] font-black uppercase tracking-widest ${isActive ? "text-white" : "group-hover:translate-x-1.5 transition-transform"}`}>
                                         {item.label}
                                     </span>
                                 </div>
                                 {isActive && (
                                     <motion.div 
                                         layoutId="active-pill"
-                                        className="w-1 h-4 bg-indigo-500 rounded-full shadow-[0_0_12px_rgba(99,102,241,0.8)]"
+                                        className="absolute right-6 w-1 h-3 bg-indigo-500 rounded-full shadow-[0_0_15px_rgba(99,102,241,1)]"
                                     />
                                 )}
                             </NavLink>
@@ -93,43 +96,45 @@ export default function AppLayout() {
                     })}
                 </div>
 
-                {/* Sidebar Footer — User Stats */}
-                <div className="p-6 border-t border-white/5 space-y-4 bg-white/[0.01]">
-                    <div className="flex items-center gap-3 px-2">
-                        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-zinc-700 to-zinc-900 border border-white/10 flex items-center justify-center text-[10px] font-black text-zinc-400">
-                            {user?.email?.slice(0, 2).toUpperCase()}
+                {/* Sidebar Footer — User Integrity Stats */}
+                <div className="p-8 border-t border-white/5 bg-white/[0.01]">
+                    <div className="flex items-center gap-4 mb-8">
+                        <div className="w-10 h-10 rounded-2xl bg-zinc-900 border border-white/5 flex items-center justify-center text-[10px] font-black text-indigo-400 shadow-inner shrink-0">
+                            {user?.email?.slice(0, 2).toUpperCase() || <Fingerprint className="w-4 h-4" />}
                         </div>
                         <div className="flex flex-col min-w-0">
-                            <span className="text-[10px] font-bold text-zinc-100 truncate">{user?.email}</span>
-                            <span className="text-[9px] font-bold text-emerald-500 uppercase tracking-widest flex items-center gap-1.5 mt-0.5">
+                            <span className="text-[11px] font-black text-zinc-100 truncate italic">{user?.email || "GUEST_NODE"}</span>
+                            <span className="text-[8px] font-black text-emerald-500 uppercase tracking-widest flex items-center gap-2 mt-1">
                                 <span className="w-1 h-1 rounded-full bg-emerald-500 animate-pulse" />
-                                Operator Verified
+                                OPERATOR_SYNCED
                             </span>
                         </div>
                     </div>
                     <button
                         type="button"
                         onClick={handleSignOut}
-                        className="group w-full flex items-center gap-3 px-4 py-3 rounded-xl text-[11px] font-black uppercase tracking-widest text-zinc-600 hover:text-red-400 hover:bg-red-500/5 transition-all duration-300 border border-transparent hover:border-red-500/10"
+                        className="group w-full flex items-center justify-center gap-3 py-4 rounded-2xl text-[9px] font-black uppercase tracking-[0.3em] text-zinc-700 hover:text-red-400 hover:bg-red-500/5 transition-all duration-300 border border-white/[0.02] hover:border-red-500/10"
                     >
-                        <LogOut className="w-4 h-4 transition-transform group-hover:-translate-x-1" />
-                        Terminate Session
+                        <LogOut className="w-3.5 h-3.5" />
+                        Terminate_Session
                     </button>
                 </div>
             </nav>
 
-            {/* Main Content Area — Smooth Page Transitions */}
-            <main className="flex-1 flex flex-col min-w-0 z-10 relative overflow-hidden">
+            {/* Main Content Area — Optimized for 144Hz */}
+            <main className="flex-1 flex flex-col min-w-0 z-10 relative overflow-hidden h-full">
                 <AnimatePresence mode="wait">
                     <motion.div
                         key={location.pathname}
-                        initial={{ opacity: 0, y: 15 }}
+                        initial={{ opacity: 0, y: 10 }}
                         animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: -15 }}
-                        transition={{ duration: 0.45, ease: [0.23, 1, 0.32, 1] }}
-                        className="flex-1 h-full"
+                        exit={{ opacity: 0, y: -10 }}
+                        transition={{ duration: 0.35, ease: [0.23, 1, 0.32, 1] }}
+                        className="flex-1 h-full overflow-y-auto overflow-x-hidden"
                     >
-                        <Outlet />
+                        <div className="min-h-full w-full">
+                           <Outlet />
+                        </div>
                     </motion.div>
                 </AnimatePresence>
             </main>
