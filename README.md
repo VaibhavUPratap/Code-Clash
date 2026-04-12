@@ -187,3 +187,46 @@ When `GEMINI_API_KEY` is not set, a deterministic rule-based mock is used so the
 - ✅ CSV upload + post URL (Gemini series) + bundled sample
 - ✅ Clean dark-mode UI with responsive design
 - ✅ Modular backend architecture (swap Gemini → any LLM in one file)
+
+---
+
+## 🔎 Project Audit Issues (April 2026)
+
+Audit scope: all tracked project files in this repository (backend, frontend, and root docs/config), excluding dependency/cache folders.
+
+### High Severity
+
+| File | Issue | Why it matters | Fix |
+|------|-------|----------------|-----|
+| `backend/requirements.txt` | Dependencies are unpinned | Non-reproducible builds and unexpected production breakage | Pin versions (for example `Flask==...`) and keep lock strategy consistent |
+| `backend/config.py` | `SECRET_KEY` has a hardcoded fallback value | If env vars are missed in production, auth secrets become predictable | Require `SECRET_KEY`/`JWT_SECRET` from environment and fail fast if missing |
+| `backend/db.py` | SQLite path is fixed to local `instance/codeclash.db` | Cloud/container filesystem may be ephemeral or non-writable | Add env-driven DB path and/or migrate to managed DB for production |
+| `backend/routes/analyze.py` | Legacy `/analyze` route duplicates core pipeline route | Confusing parallel flow and stale logic divergence risk | Remove legacy route or fully align it with `/api/analyze` flow |
+
+### Medium Severity
+
+| File | Issue | Why it matters | Fix |
+|------|-------|----------------|-----|
+| `backend/app.py` | CORS allows `*` by default when `CORS_ORIGINS` is not set | Overly broad cross-origin exposure in production | Set explicit frontend origin(s) via `CORS_ORIGINS` env var |
+| `frontend/src/services/api.js` | API base silently falls back to `http://localhost:5000` | Production misconfiguration can be hidden until runtime failures | Enforce `REACT_APP_API_URL` in production builds |
+| `frontend/package.json` | `axios` is installed but current API service uses `fetch` only | Unused dependency adds maintenance and security surface | Remove unused dependency or migrate API layer to axios consistently |
+| `frontend/package.json` | Both `plotly.js` and `plotly.js-dist-min` are present | Redundant dependency weight and maintenance overhead | Keep only the variant actually used by the app |
+
+### Low Severity
+
+| File | Issue | Why it matters | Fix |
+|------|-------|----------------|-----|
+| `backend/services/anomaly_detection.py` and `backend/services/detection_service.py` | Two anomaly detection modules co-exist | Makes it unclear which logic is authoritative | Keep one detection implementation and remove/retire the other |
+| `backend/generate_data.py` | Utility script is not wired into main app | Adds clutter and maintenance overhead | Move to a dedicated scripts folder or document intended usage |
+| Root dependencies (`npm install` audit output) | Current frontend dependency tree reports known vulnerabilities | Security and compliance risk for production deploys | Run `npm audit`, apply safe fixes, then re-test build |
+
+### Deployment Checklist (from issues)
+
+- [ ] Pin Python dependency versions in `backend/requirements.txt`.
+- [ ] Enforce strong `SECRET_KEY` and `JWT_SECRET` via environment variables only.
+- [ ] Configure persistent database strategy (env-driven path or managed DB).
+- [ ] Remove or refactor legacy `backend/routes/analyze.py` route.
+- [ ] Set strict `CORS_ORIGINS` in production.
+- [ ] Set `REACT_APP_API_URL` explicitly in frontend deployment.
+- [ ] Remove redundant/unused frontend dependencies.
+- [ ] Run security audit fix cycle (`npm audit`) before final production release.
