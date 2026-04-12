@@ -6,3 +6,4 @@ scipy
 python-dotenv
 google-genai
 PyJWT
+gunicorn

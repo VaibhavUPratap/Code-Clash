@@ -1,3 +1,5 @@
+import os
+
 from flask import Flask, jsonify
 from config import Config
 from db import close_db, init_db
@@ -17,7 +19,13 @@ def create_app():
     try:
         from flask_cors import CORS
 
-        CORS(app, supports_credentials=True)
+        cors_origins = os.getenv("CORS_ORIGINS", "*").strip()
+        origins = [o.strip() for o in cors_origins.split(",") if o.strip()]
+        CORS(
+            app,
+            supports_credentials=True,
+            origins=origins if origins else "*",
+        )
     except ImportError:
         pass
 
@@ -34,4 +42,7 @@ def create_app():
 
 if __name__ == '__main__':
     app = create_app()
-    app.run(debug=True, port=5000)
+    host = os.getenv("HOST", "0.0.0.0")
+    port = int(os.getenv("PORT", "5000"))
+    debug = os.getenv("FLASK_DEBUG", "0").lower() in {"1", "true", "yes"}
+    app.run(host=host, port=port, debug=debug)
