@@ -41,6 +41,7 @@ python app.py
 ```bash
 cd frontend
 npm install
+cp .env.example .env   # set REACT_APP_API_URL to your backend URL
 npm start
 # → http://localhost:3000
 ```

@@ -2,7 +2,36 @@
  * Centralized API Service — base URL from env or localhost:5000
  */
 
-const BASE_URL = (process.env.REACT_APP_API_URL || "http://localhost:5000").replace(/\/$/, "");
+function normalizeBaseUrl(url) {
+  return String(url || "")
+    .trim()
+    .replace(/\/$/, "")
+    .replace(/\/api$/, "");
+}
+
+const DEFAULT_PROD_API_URL = "https://code-clash-zoaj.onrender.com";
+
+function resolveBaseUrl() {
+  const envUrl = normalizeBaseUrl(process.env.REACT_APP_API_URL);
+  if (envUrl) {
+    return envUrl;
+  }
+
+  if (typeof window !== "undefined") {
+    const host = window.location.hostname;
+    const isLocalHost = host === "localhost" || host === "127.0.0.1";
+    if (isLocalHost) {
+      return "http://localhost:5000";
+    }
+
+    // In production without env config, use known deployed backend.
+    return normalizeBaseUrl(DEFAULT_PROD_API_URL || window.location.origin);
+  }
+
+  return "";
+}
+
+const BASE_URL = resolveBaseUrl();
 
 function authHeaders() {
   const token = sessionStorage.getItem("authToken");
