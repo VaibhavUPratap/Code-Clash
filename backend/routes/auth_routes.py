@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import datetime
+import os
 import sqlite3
 from functools import wraps
 
 import jwt
 from flask import Blueprint, g, jsonify, request
 from werkzeug.security import check_password_hash, generate_password_hash
+from google.oauth2 import id_token
+from google.auth.transport import requests
 
 from config import Config
 from db import get_db
@@ -53,67 +56,16 @@ def require_auth(view):
     return wrapped
 
 
+# Legacy register route disabled. Use Google Auth.
 @auth_bp.route("/register", methods=["POST"])
 def register():
-    body = request.get_json(silent=True) or {}
-    email = (body.get("email") or "").strip().lower()
-    password = body.get("password") or ""
-
-    if not email or not password:
-        return jsonify({"status": "error", "message": "Email and password required."}), 400
-    if len(password) < 6:
-        return jsonify({"status": "error", "message": "Password must be at least 6 characters."}), 400
-    if "@" not in email or "." not in email.split("@")[-1]:
-        return jsonify({"status": "error", "message": "Invalid email address."}), 400
-
-    db = get_db()
-    created = datetime.datetime.now(datetime.timezone.utc).isoformat()
-    try:
-        db.execute(
-            "INSERT INTO users (email, password_hash, created_at) VALUES (?, ?, ?)",
-            (email, generate_password_hash(password), created),
-        )
-        db.commit()
-    except sqlite3.IntegrityError:
-        return jsonify({"status": "error", "message": "Email already registered."}), 409
-
-    row = db.execute("SELECT id, email FROM users WHERE email = ?", (email,)).fetchone()
-    token = create_token(row["id"], row["email"])
-    return jsonify(
-        {
-            "status": "ok",
-            "token": token,
-            "user": {"id": row["id"], "email": row["email"]},
-        }
-    )
+    return jsonify({"status": "error", "message": "Email registration is disabled."}), 403
 
 
+# Legacy login route disabled. Use Google Auth.
 @auth_bp.route("/login", methods=["POST"])
 def login():
-    body = request.get_json(silent=True) or {}
-    email = (body.get("email") or "").strip().lower()
-    password = body.get("password") or ""
-
-    if not email or not password:
-        return jsonify({"status": "error", "message": "Email and password required."}), 400
-
-    db = get_db()
-    row = db.execute(
-        "SELECT id, email, password_hash FROM users WHERE email = ?",
-        (email,),
-    ).fetchone()
-
-    if not row or not check_password_hash(row["password_hash"], password):
-        return jsonify({"status": "error", "message": "Invalid email or password."}), 401
-
-    token = create_token(row["id"], row["email"])
-    return jsonify(
-        {
-            "status": "ok",
-            "token": token,
-            "user": {"id": row["id"], "email": row["email"]},
-        }
-    )
+    return jsonify({"status": "error", "message": "Standard login is disabled."}), 403
 
 
 @auth_bp.route("/me", methods=["GET"])
@@ -123,5 +75,54 @@ def me():
         {
             "status": "ok",
             "user": {"id": g.current_user_id, "email": g.current_user_email},
+        }
+    )
+
+
+@auth_bp.route("/google-login", methods=["POST"])
+def google_login():
+    body = request.get_json(silent=True) or {}
+    id_token_str = body.get("idToken")
+
+    if not id_token_str:
+        return jsonify({"status": "error", "message": "ID Token required."}), 400
+
+    try:
+        # Verify the ID token
+        # Note: Specifying CLIENT_ID is highly recommended for security.
+        # Since we're using Firebase, we can also use their certs.
+        id_info = id_token.verify_firebase_token(
+            id_token_str, requests.Request(), audience=os.getenv("FIREBASE_PROJECT_ID")
+        )
+        
+        email = id_info.get("email")
+        if not email:
+            return jsonify({"status": "error", "message": "Invalid token: email missing."}), 400
+            
+    except Exception as e:
+        return jsonify({"status": "error", "message": f"Token verification failed: {str(e)}"}), 401
+
+    db = get_db()
+    # Check if user exists
+    row = db.execute("SELECT id, email FROM users WHERE email = ?", (email,)).fetchone()
+    
+    if not row:
+        # Create new user for Google login
+        created = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        # Use a placeholder for password_hash to satisfy NOT NULL constraint
+        placeholder_hash = "GOOGLE_AUTH_PLACEHOLDER"
+        db.execute(
+            "INSERT INTO users (email, password_hash, created_at) VALUES (?, ?, ?)",
+            (email, placeholder_hash, created),
+        )
+        db.commit()
+        row = db.execute("SELECT id, email FROM users WHERE email = ?", (email,)).fetchone()
+
+    token = create_token(row["id"], row["email"])
+    return jsonify(
+        {
+            "status": "ok",
+            "token": token,
+            "user": {"id": row["id"], "email": row["email"]},
         }
     )

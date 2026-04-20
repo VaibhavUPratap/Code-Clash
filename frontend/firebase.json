@@ -1,0 +1,10 @@
+{
+  "auth": {
+    "providers": {
+      "googleSignIn": {
+        "oAuthBrandDisplayName": "Code Clash",
+        "supportEmail": "vaibhav.u.107@gmail.com"
+      }
+    }
+  }
+}

@@ -82,6 +82,14 @@ export async function register(email, password) {
   });
 }
 
+export async function googleLogin(idToken) {
+  return apiFetch("/api/auth/google-login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ idToken }),
+  });
+}
+
 export async function fetchMe() {
   return apiFetch("/api/auth/me");
 }
